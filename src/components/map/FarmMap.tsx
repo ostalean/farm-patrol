@@ -121,14 +121,35 @@ export function FarmMap({
     }
   }, [onMapReady]);
 
-  const handleMapError = useCallback((event: { error: { message?: string } }) => {
-    console.error('Mapbox error:', event.error);
-    const message = event.error?.message || 'Unknown map error';
-    if (message.includes('401') || message.includes('403') || message.includes('Unauthorized')) {
-      setMapError('Token unauthorized or domain restricted. Check your Mapbox token settings.');
-    } else {
-      setMapError(`Map error: ${message}`);
+  const handleMapError = useCallback((event: unknown) => {
+    const raw = (event as any)?.error;
+    // In some cases react-map-gl wraps Mapbox errors as { _type, value }
+    const err = raw?.value ?? raw;
+
+    console.error('Mapbox error:', raw ?? event);
+
+    const status: number | undefined = err?.status;
+    const url: string | undefined = err?.url;
+    const message: string | undefined = err?.message;
+
+    // Mapbox commonly returns 401/403 with an empty message string.
+    if (status === 401 || status === 403) {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      setMapError(
+        [
+          `Mapbox request blocked (HTTP ${status}).`,
+          'This is usually caused by token URL restrictions (allowlist) or missing public scopes.',
+          origin ? `Current site: ${origin}` : null,
+          url ? `Blocked URL: ${url}` : null,
+          'Fix: ensure the token allows this domain and has scopes like styles:read, styles:tiles, and fonts:read.',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      );
+      return;
     }
+
+    setMapError(`Map error: ${message || 'Unknown map error'}`);
   }, []);
 
   const handleMapClick = useCallback(
