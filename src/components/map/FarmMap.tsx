@@ -8,12 +8,12 @@ import Map, {
   type MapRef,
   type ViewState,
 } from 'react-map-gl';
+import mapboxgl from 'mapbox-gl';
 import type { Feature, FeatureCollection, Polygon } from 'geojson';
 import type { Block, BlockMetrics, Tractor } from '@/types/farm';
 import { getBlockStatus } from '@/types/farm';
 import { DrawControl } from './DrawControl';
-import 'mapbox-gl/dist/mapbox-gl.css';
-import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
+import { AlertTriangle } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 
@@ -56,11 +56,15 @@ export function FarmMap({
   enableDrawing = true,
 }: FarmMapProps) {
   const mapRef = useRef<MapRef>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [popupInfo, setPopupInfo] = useState<{
     block: Block;
     longitude: number;
     latitude: number;
   } | null>(null);
+
+  // Check for token issues
+  const tokenMissing = !MAPBOX_TOKEN || MAPBOX_TOKEN.trim() === '';
 
   // Convert blocks to GeoJSON FeatureCollection for each status
   const { healthyBlocks, warningBlocks, criticalBlocks, selectedBlock } = useMemo(() => {
@@ -117,6 +121,16 @@ export function FarmMap({
     }
   }, [onMapReady]);
 
+  const handleMapError = useCallback((event: { error: { message?: string } }) => {
+    console.error('Mapbox error:', event.error);
+    const message = event.error?.message || 'Unknown map error';
+    if (message.includes('401') || message.includes('403') || message.includes('Unauthorized')) {
+      setMapError('Token unauthorized or domain restricted. Check your Mapbox token settings.');
+    } else {
+      setMapError(`Map error: ${message}`);
+    }
+  }, []);
+
   const handleMapClick = useCallback(
     (event: mapboxgl.MapLayerMouseEvent) => {
       const features = event.features;
@@ -155,15 +169,34 @@ export function FarmMap({
     zoom: zoom,
   };
 
+  // Show error overlay if token is missing or map error occurred
+  if (tokenMissing || mapError) {
+    return (
+      <div className="h-full w-full relative bg-muted flex items-center justify-center">
+        <div className="bg-destructive/10 border border-destructive rounded-lg p-6 text-center max-w-md">
+          <AlertTriangle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-destructive mb-2">Map Error</h3>
+          <p className="text-sm text-muted-foreground">
+            {tokenMissing
+              ? 'VITE_MAPBOX_TOKEN is missing or empty. Please add your Mapbox access token to the .env file.'
+              : mapError}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full w-full relative">
       <Map
         ref={mapRef}
+        mapLib={mapboxgl}
         mapboxAccessToken={MAPBOX_TOKEN}
         initialViewState={initialViewState}
         style={{ width: '100%', height: '100%' }}
         mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
         onLoad={handleMapLoad}
+        onError={handleMapError}
         onClick={handleMapClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
