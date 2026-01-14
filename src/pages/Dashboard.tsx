@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Map as LeafletMap } from 'leaflet';
+import type { MapRef } from 'react-map-gl';
 import { FarmMap } from '@/components/map/FarmMap';
 import { BlockList } from '@/components/sidebar/BlockList';
 import { BlockDetail } from '@/components/sidebar/BlockDetail';
@@ -17,7 +17,7 @@ import type { Feature, Polygon } from 'geojson';
 
 export default function Dashboard() {
   const { toast } = useToast();
-  const mapRef = useRef<LeafletMap | null>(null);
+  const mapRef = useRef<MapRef | null>(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null);
@@ -195,6 +195,14 @@ export default function Dashboard() {
     });
   };
 
+  const handleZoomIn = useCallback(() => {
+    mapRef.current?.zoomIn();
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    mapRef.current?.zoomOut();
+  }, []);
+
   const triggeredAlerts = alerts.filter(a => a.status === 'triggered');
   const blockAlerts = selectedBlock ? alerts.filter(a => a.block_id === selectedBlock.id) : [];
   const blockVisits = selectedBlock ? visits.filter(v => v.block_id === selectedBlock.id) : [];
@@ -254,8 +262,8 @@ export default function Dashboard() {
           />
           
           <MapControls
-            onZoomIn={() => mapRef.current?.zoomIn()}
-            onZoomOut={() => mapRef.current?.zoomOut()}
+            onZoomIn={handleZoomIn}
+            onZoomOut={handleZoomOut}
             onUploadGeoJSON={() => setUploadDialogOpen(true)}
             isSimulatorRunning={isSimulatorRunning}
             onToggleSimulator={handleToggleSimulator}

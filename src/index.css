@@ -165,32 +165,49 @@
   }
 }
 
-/* Leaflet overrides */
-.leaflet-container {
+/* Mapbox overrides */
+.mapboxgl-map {
   font-family: 'Inter', system-ui, sans-serif !important;
-  background: hsl(var(--muted)) !important;
 }
 
-.leaflet-popup-content-wrapper {
-  @apply bg-card text-card-foreground rounded-lg shadow-xl border border-border !important;
+.mapboxgl-popup-content {
+  @apply bg-card text-card-foreground rounded-lg shadow-xl border border-border p-3 !important;
 }
 
-.leaflet-popup-tip {
-  @apply bg-card !important;
+.mapboxgl-popup-tip {
+  border-top-color: hsl(var(--card)) !important;
 }
 
-.leaflet-control-zoom {
-  @apply border-none shadow-lg !important;
+.mapboxgl-popup-close-button {
+  @apply text-foreground hover:text-muted-foreground !important;
+  font-size: 18px;
+  padding: 4px 8px;
 }
 
-.leaflet-control-zoom a {
-  @apply bg-card text-foreground border border-border hover:bg-muted !important;
+.mapboxgl-ctrl-group {
+  @apply bg-card border border-border shadow-lg !important;
+  border-radius: 8px !important;
 }
 
-.leaflet-control-zoom a:first-child {
-  @apply rounded-t-lg !important;
+.mapboxgl-ctrl-group button {
+  @apply bg-card text-foreground hover:bg-muted !important;
 }
 
-.leaflet-control-zoom a:last-child {
-  @apply rounded-b-lg !important;
+.mapboxgl-ctrl-group button + button {
+  border-top: 1px solid hsl(var(--border)) !important;
+}
+
+/* Mapbox Draw overrides */
+.mapbox-gl-draw_ctrl-draw-btn {
+  @apply bg-card text-foreground hover:bg-muted !important;
+}
+
+.mapbox-gl-draw_polygon {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%231B4332' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z'/%3E%3Cpath d='M12 8v8m-4-4h8'/%3E%3C/svg%3E") !important;
+  background-size: 18px !important;
+}
+
+.mapbox-gl-draw_trash {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23ef4444' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2'/%3E%3C/svg%3E") !important;
+  background-size: 18px !important;
 }

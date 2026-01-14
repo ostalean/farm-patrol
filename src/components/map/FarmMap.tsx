@@ -1,19 +1,23 @@
-import { useEffect, useRef, useCallback } from 'react';
-import L, { type Map as LeafletMap } from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import 'leaflet-draw';
-import 'leaflet-draw/dist/leaflet.draw.css';
+import { useState, useCallback, useMemo, useRef } from 'react';
+import Map, {
+  Source,
+  Layer,
+  Marker,
+  Popup,
+  NavigationControl,
+  type MapRef,
+  type ViewState,
+} from 'react-map-gl';
+import type { Feature, FeatureCollection, Polygon } from 'geojson';
 import type { Block, BlockMetrics, Tractor } from '@/types/farm';
 import { getBlockStatus } from '@/types/farm';
-import type { Feature, Polygon } from 'geojson';
+import { DrawControl } from './DrawControl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 
-// Fix for default marker icons in Leaflet with Vite
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 interface FarmMapProps {
   blocks: Block[];
@@ -23,27 +27,10 @@ interface FarmMapProps {
   onBlockClick: (block: Block) => void;
   center: [number, number];
   zoom: number;
-  onMapReady?: (map: LeafletMap) => void;
+  onMapReady?: (map: MapRef) => void;
   onBlockDrawn?: (geometry: Feature<Polygon>) => void;
   enableDrawing?: boolean;
 }
-
-const tractorIcon = new L.DivIcon({
-  html: `<div style="position: relative;">
-    <div style="width: 32px; height: 32px; background: hsl(152, 45%, 22%); border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.25); border: 2px solid white;">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="5.5" cy="17.5" r="2.5"/>
-        <circle cx="17.5" cy="17.5" r="2.5"/>
-        <path d="M12 17.5V6a1 1 0 0 0-1-1H5a2 2 0 0 0-2 2v8.5"/>
-        <path d="M20 17.5V9a1 1 0 0 0-1-1h-3l-2-3H9"/>
-      </svg>
-    </div>
-    <div style="position: absolute; bottom: -2px; right: -2px; width: 10px; height: 10px; background: hsl(142, 60%, 45%); border-radius: 50%; border: 2px solid white;"></div>
-  </div>`,
-  className: 'tractor-marker',
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-});
 
 function getBlockColor(status: ReturnType<typeof getBlockStatus>): string {
   switch (status) {
@@ -68,219 +55,272 @@ export function FarmMap({
   onBlockDrawn,
   enableDrawing = true,
 }: FarmMapProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
-  const polygonLayersRef = useRef<Map<string, L.Polygon>>(new Map());
-  const tractorMarkersRef = useRef<Map<string, L.Marker>>(new Map());
-  const drawControlRef = useRef<L.Control.Draw | null>(null);
-  const drawnItemsRef = useRef<L.FeatureGroup>(new L.FeatureGroup());
+  const mapRef = useRef<MapRef>(null);
+  const [popupInfo, setPopupInfo] = useState<{
+    block: Block;
+    longitude: number;
+    latitude: number;
+  } | null>(null);
 
-  // Handle draw created event
-  const handleDrawCreated = useCallback((e: L.LeafletEvent) => {
-    const event = e as L.DrawEvents.Created;
-    const layer = event.layer as L.Polygon;
-    
-    // Get coordinates from the drawn polygon
-    const latlngs = layer.getLatLngs()[0] as L.LatLng[];
-    const coordinates = latlngs.map((ll) => [ll.lng, ll.lat]);
-    // Close the polygon
-    coordinates.push(coordinates[0]);
-
-    const feature: Feature<Polygon> = {
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'Polygon',
-        coordinates: [coordinates],
-      },
-    };
-
-    onBlockDrawn?.(feature);
-    
-    // Remove the temporary drawn layer (we'll render it properly when saved)
-    drawnItemsRef.current.clearLayers();
-  }, [onBlockDrawn]);
-
-  // Create map once
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-
-    const map = L.map(containerRef.current, {
-      zoomControl: false,
-      attributionControl: true,
-    });
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
-
-    map.setView(center, zoom);
-
-    // Add drawn items layer
-    drawnItemsRef.current.addTo(map);
-
-    // Add draw control if enabled
-    if (enableDrawing) {
-      const drawControl = new L.Control.Draw({
-        position: 'topleft',
-        draw: {
-          polygon: {
-            allowIntersection: false,
-            showArea: true,
-            shapeOptions: {
-              color: '#22c55e',
-              fillOpacity: 0.3,
-            },
-          },
-          rectangle: {
-            showArea: true,
-            shapeOptions: {
-              color: '#22c55e',
-              fillOpacity: 0.3,
-            },
-          },
-          circle: false,
-          circlemarker: false,
-          marker: false,
-          polyline: false,
-        },
-        edit: {
-          featureGroup: drawnItemsRef.current,
-          remove: false,
-          edit: false,
-        },
-      });
-      drawControl.addTo(map);
-      drawControlRef.current = drawControl;
-
-      map.on(L.Draw.Event.CREATED, handleDrawCreated);
-    }
-
-    mapRef.current = map;
-    onMapReady?.(map);
-
-    return () => {
-      map.off(L.Draw.Event.CREATED, handleDrawCreated);
-      map.remove();
-      mapRef.current = null;
-      drawControlRef.current = null;
-      polygonLayersRef.current.clear();
-      tractorMarkersRef.current.clear();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Keep view in sync
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    map.setView(center, zoom, { animate: true });
-  }, [center, zoom]);
-
-  // Render/update polygons
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    // clear existing
-    polygonLayersRef.current.forEach((layer) => layer.remove());
-    polygonLayersRef.current.clear();
+  // Convert blocks to GeoJSON FeatureCollection for each status
+  const { healthyBlocks, warningBlocks, criticalBlocks, selectedBlock } = useMemo(() => {
+    const healthy: Feature<Polygon>[] = [];
+    const warning: Feature<Polygon>[] = [];
+    const critical: Feature<Polygon>[] = [];
+    let selected: Feature<Polygon> | null = null;
 
     blocks.forEach((block) => {
       const metrics = blockMetrics[block.id];
       const status = getBlockStatus(metrics ?? null);
-      const color = getBlockColor(status);
-      const isSelected = block.id === selectedBlockId;
+      const feature: Feature<Polygon> = {
+        type: 'Feature',
+        id: block.id,
+        properties: {
+          id: block.id,
+          name: block.name,
+          crop: block.crop,
+          status,
+        },
+        geometry: block.geometry_geojson.geometry,
+      };
 
-      const latlngs = block.geometry_geojson.geometry.coordinates[0].map(
-        (coord: number[]) => [coord[1], coord[0]] as [number, number]
-      );
-
-      const polygon = L.polygon(latlngs, {
-        color,
-        fillColor: color,
-        fillOpacity: isSelected ? 0.5 : 0.3,
-        weight: isSelected ? 3 : 2,
-      });
-
-      polygon.on('click', () => onBlockClick(block));
-
-      // Popup content (safe DOM nodes, no innerHTML)
-      const popup = document.createElement('div');
-      popup.className = 'text-sm';
-      const strong = document.createElement('strong');
-      strong.className = 'font-display';
-      strong.textContent = block.name;
-      popup.appendChild(strong);
-      if (block.crop) {
-        const p = document.createElement('p');
-        p.className = 'text-muted-foreground';
-        p.textContent = block.crop;
-        popup.appendChild(p);
+      if (block.id === selectedBlockId) {
+        selected = feature;
       }
-      polygon.bindPopup(popup);
 
-      polygon.addTo(map);
-      polygonLayersRef.current.set(block.id, polygon);
-    });
-  }, [blocks, blockMetrics, selectedBlockId, onBlockClick]);
-
-  // Render/update tractor markers
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    tractors.forEach((tractor) => {
-      if (!tractor.last_lat || !tractor.last_lon) return;
-
-      const existingMarker = tractorMarkersRef.current.get(tractor.id);
-      
-      if (existingMarker) {
-        // Update position smoothly
-        existingMarker.setLatLng([tractor.last_lat, tractor.last_lon]);
-      } else {
-        // Create new marker
-        const marker = L.marker([tractor.last_lat, tractor.last_lon], {
-          icon: tractorIcon,
-        });
-
-        const popup = document.createElement('div');
-        popup.className = 'text-sm';
-        const strong = document.createElement('strong');
-        strong.className = 'font-display';
-        strong.textContent = tractor.name;
-        popup.appendChild(strong);
-        const p = document.createElement('p');
-        p.className = 'text-muted-foreground';
-        p.textContent = tractor.identifier;
-        popup.appendChild(p);
-        marker.bindPopup(popup);
-
-        marker.addTo(map);
-        tractorMarkersRef.current.set(tractor.id, marker);
+      switch (status) {
+        case 'healthy':
+          healthy.push(feature);
+          break;
+        case 'warning':
+          warning.push(feature);
+          break;
+        case 'critical':
+          critical.push(feature);
+          break;
       }
     });
 
-    // Remove markers for tractors that no longer exist
-    tractorMarkersRef.current.forEach((marker, id) => {
-      if (!tractors.find(t => t.id === id)) {
-        marker.remove();
-        tractorMarkersRef.current.delete(id);
+    return {
+      healthyBlocks: { type: 'FeatureCollection', features: healthy } as FeatureCollection,
+      warningBlocks: { type: 'FeatureCollection', features: warning } as FeatureCollection,
+      criticalBlocks: { type: 'FeatureCollection', features: critical } as FeatureCollection,
+      selectedBlock: selected
+        ? ({ type: 'FeatureCollection', features: [selected] } as FeatureCollection)
+        : null,
+    };
+  }, [blocks, blockMetrics, selectedBlockId]);
+
+  const handleMapLoad = useCallback(() => {
+    if (mapRef.current) {
+      onMapReady?.(mapRef.current);
+    }
+  }, [onMapReady]);
+
+  const handleMapClick = useCallback(
+    (event: mapboxgl.MapLayerMouseEvent) => {
+      const features = event.features;
+      if (features && features.length > 0) {
+        const clickedFeature = features[0];
+        const blockId = clickedFeature.properties?.id;
+        const block = blocks.find((b) => b.id === blockId);
+        if (block) {
+          onBlockClick(block);
+        }
       }
-    });
-  }, [tractors]);
+    },
+    [blocks, onBlockClick]
+  );
+
+  const handleMouseEnter = useCallback(() => {
+    if (mapRef.current) {
+      mapRef.current.getCanvas().style.cursor = 'pointer';
+    }
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (mapRef.current) {
+      mapRef.current.getCanvas().style.cursor = '';
+    }
+  }, []);
+
+  const interactiveLayerIds = useMemo(
+    () => ['blocks-healthy-fill', 'blocks-warning-fill', 'blocks-critical-fill'],
+    []
+  );
+
+  const initialViewState: Partial<ViewState> = {
+    longitude: center[1],
+    latitude: center[0],
+    zoom: zoom,
+  };
 
   return (
-    <div ref={containerRef} className="h-full w-full">
+    <div className="h-full w-full relative">
+      <Map
+        ref={mapRef}
+        mapboxAccessToken={MAPBOX_TOKEN}
+        initialViewState={initialViewState}
+        style={{ width: '100%', height: '100%' }}
+        mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
+        onLoad={handleMapLoad}
+        onClick={handleMapClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        interactiveLayerIds={interactiveLayerIds}
+      >
+        <NavigationControl position="bottom-right" showCompass={false} />
+
+        {enableDrawing && <DrawControl onBlockDrawn={onBlockDrawn} position="top-left" />}
+
+        {/* Healthy blocks */}
+        <Source id="blocks-healthy" type="geojson" data={healthyBlocks}>
+          <Layer
+            id="blocks-healthy-fill"
+            type="fill"
+            paint={{
+              'fill-color': '#22c55e',
+              'fill-opacity': 0.3,
+            }}
+          />
+          <Layer
+            id="blocks-healthy-outline"
+            type="line"
+            paint={{
+              'line-color': '#22c55e',
+              'line-width': 2,
+            }}
+          />
+        </Source>
+
+        {/* Warning blocks */}
+        <Source id="blocks-warning" type="geojson" data={warningBlocks}>
+          <Layer
+            id="blocks-warning-fill"
+            type="fill"
+            paint={{
+              'fill-color': '#f59e0b',
+              'fill-opacity': 0.3,
+            }}
+          />
+          <Layer
+            id="blocks-warning-outline"
+            type="line"
+            paint={{
+              'line-color': '#f59e0b',
+              'line-width': 2,
+            }}
+          />
+        </Source>
+
+        {/* Critical blocks */}
+        <Source id="blocks-critical" type="geojson" data={criticalBlocks}>
+          <Layer
+            id="blocks-critical-fill"
+            type="fill"
+            paint={{
+              'fill-color': '#ef4444',
+              'fill-opacity': 0.3,
+            }}
+          />
+          <Layer
+            id="blocks-critical-outline"
+            type="line"
+            paint={{
+              'line-color': '#ef4444',
+              'line-width': 2,
+            }}
+          />
+        </Source>
+
+        {/* Selected block highlight */}
+        {selectedBlock && (
+          <Source id="blocks-selected" type="geojson" data={selectedBlock}>
+            <Layer
+              id="blocks-selected-fill"
+              type="fill"
+              paint={{
+                'fill-color': '#3b82f6',
+                'fill-opacity': 0.5,
+              }}
+            />
+            <Layer
+              id="blocks-selected-outline"
+              type="line"
+              paint={{
+                'line-color': '#3b82f6',
+                'line-width': 3,
+              }}
+            />
+          </Source>
+        )}
+
+        {/* Tractor markers */}
+        {tractors.map((tractor) => {
+          if (!tractor.last_lat || !tractor.last_lon) return null;
+          return (
+            <Marker
+              key={tractor.id}
+              longitude={tractor.last_lon}
+              latitude={tractor.last_lat}
+              anchor="center"
+            >
+              <div className="relative cursor-pointer group">
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-lg border-2 border-white transition-transform group-hover:scale-110">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="5.5" cy="17.5" r="2.5" />
+                    <circle cx="17.5" cy="17.5" r="2.5" />
+                    <path d="M12 17.5V6a1 1 0 0 0-1-1H5a2 2 0 0 0-2 2v8.5" />
+                    <path d="M20 17.5V9a1 1 0 0 0-1-1h-3l-2-3H9" />
+                  </svg>
+                </div>
+                <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-success rounded-full border-2 border-white" />
+                {/* Tooltip on hover */}
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  <div className="bg-card text-card-foreground px-2 py-1 rounded shadow-lg border text-sm whitespace-nowrap">
+                    <strong className="font-display">{tractor.name}</strong>
+                    <p className="text-muted-foreground text-xs">{tractor.identifier}</p>
+                  </div>
+                </div>
+              </div>
+            </Marker>
+          );
+        })}
+
+        {popupInfo && (
+          <Popup
+            longitude={popupInfo.longitude}
+            latitude={popupInfo.latitude}
+            anchor="bottom"
+            onClose={() => setPopupInfo(null)}
+            closeOnClick={false}
+          >
+            <div className="text-sm">
+              <strong className="font-display">{popupInfo.block.name}</strong>
+              {popupInfo.block.crop && (
+                <p className="text-muted-foreground">{popupInfo.block.crop}</p>
+              )}
+            </div>
+          </Popup>
+        )}
+      </Map>
+
       {blocks.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[500]">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="bg-background/90 backdrop-blur-sm rounded-lg p-6 text-center max-w-sm shadow-lg pointer-events-auto">
-            <p className="text-muted-foreground mb-2">
-              No hay cuarteles aún
-            </p>
+            <p className="text-muted-foreground mb-2">No hay cuarteles aún</p>
             <p className="text-sm text-muted-foreground">
-              Usa las herramientas de dibujo en la esquina superior izquierda para crear un cuartel, o carga un archivo GeoJSON.
+              Usa las herramientas de dibujo en la esquina superior izquierda para crear un
+              cuartel, o carga un archivo GeoJSON.
             </p>
           </div>
         </div>
