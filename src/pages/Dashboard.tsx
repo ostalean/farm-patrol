@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import type { Map as LeafletMap } from 'leaflet';
 import { FarmMap } from '@/components/map/FarmMap';
 import { BlockList } from '@/components/sidebar/BlockList';
 import { BlockDetail } from '@/components/sidebar/BlockDetail';
@@ -14,12 +15,14 @@ import type { Feature, Polygon } from 'geojson';
 
 export default function Dashboard() {
   const { toast } = useToast();
+  const mapRef = useRef<LeafletMap | null>(null);
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null);
   const [alertDialogOpen, setAlertDialogOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [isSimulatorRunning, setIsSimulatorRunning] = useState(false);
-  
+
   // Demo data state
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [blockMetrics, setBlockMetrics] = useState<Record<string, BlockMetrics>>({});
@@ -142,11 +145,14 @@ export default function Dashboard() {
             onBlockClick={handleBlockSelect}
             center={DEMO_MAP_CENTER}
             zoom={DEMO_MAP_ZOOM}
+            onMapReady={(map) => {
+              mapRef.current = map;
+            }}
           />
           
           <MapControls
-            onZoomIn={() => {}}
-            onZoomOut={() => {}}
+            onZoomIn={() => mapRef.current?.zoomIn()}
+            onZoomOut={() => mapRef.current?.zoomOut()}
             onUploadGeoJSON={() => setUploadDialogOpen(true)}
             isSimulatorRunning={isSimulatorRunning}
             onToggleSimulator={() => setIsSimulatorRunning(!isSimulatorRunning)}
