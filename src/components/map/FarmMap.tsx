@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Polygon, Marker, Popup, useMap } from 'react-leaflet';
+import { useEffect } from 'react';
+import { MapContainer, TileLayer, Polygon, Marker, Popup, useMap, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Block, BlockMetrics, Tractor } from '@/types/farm';
@@ -25,38 +25,92 @@ interface FarmMapProps {
 
 const tractorIcon = new L.DivIcon({
   html: `<div class="relative">
-    <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-lg border-2 border-primary-foreground">
-      <svg class="w-5 h-5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+    <div style="width: 32px; height: 32px; background: hsl(152, 45%, 22%); border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 2px solid white;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="5.5" cy="17.5" r="2.5"/>
+        <circle cx="17.5" cy="17.5" r="2.5"/>
+        <path d="M12 17.5V6a1 1 0 0 0-1-1H5a2 2 0 0 0-2 2v8.5"/>
+        <path d="M20 17.5V9a1 1 0 0 0-1-1h-3l-2-3H9"/>
       </svg>
     </div>
-    <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-success rounded-full border border-primary-foreground animate-pulse-ring"></div>
+    <div style="position: absolute; bottom: -2px; right: -2px; width: 10px; height: 10px; background: hsl(142, 60%, 45%); border-radius: 50%; border: 2px solid white;"></div>
   </div>`,
   className: 'tractor-marker',
   iconSize: [32, 32],
   iconAnchor: [16, 16],
 });
 
-function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
-  const map = useMap();
-  
-  useEffect(() => {
-    map.setView(center, zoom);
-  }, [map, center, zoom]);
-  
-  return null;
-}
-
 function getBlockColor(status: ReturnType<typeof getBlockStatus>): string {
   switch (status) {
     case 'healthy':
-      return 'hsl(142, 60%, 45%)';
+      return '#22c55e';
     case 'warning':
-      return 'hsl(38, 92%, 55%)';
+      return '#f59e0b';
     case 'critical':
-      return 'hsl(0, 72%, 55%)';
+      return '#ef4444';
   }
+}
+
+// Separate component for block polygons
+function BlockPolygon({ 
+  block, 
+  metrics, 
+  isSelected, 
+  onClick 
+}: { 
+  block: Block; 
+  metrics: BlockMetrics | undefined;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const status = getBlockStatus(metrics || null);
+  const color = getBlockColor(status);
+  
+  // Convert GeoJSON coordinates to Leaflet format [lat, lon]
+  const positions = block.geometry_geojson.geometry.coordinates[0].map(
+    (coord: number[]) => [coord[1], coord[0]] as [number, number]
+  );
+
+  return (
+    <Polygon
+      positions={positions}
+      pathOptions={{
+        color: color,
+        fillColor: color,
+        fillOpacity: isSelected ? 0.5 : 0.3,
+        weight: isSelected ? 3 : 2,
+      }}
+      eventHandlers={{
+        click: onClick,
+      }}
+    >
+      <Popup>
+        <div className="text-sm">
+          <strong className="font-display">{block.name}</strong>
+          {block.crop && <p className="text-muted-foreground">{block.crop}</p>}
+        </div>
+      </Popup>
+    </Polygon>
+  );
+}
+
+// Separate component for tractor markers
+function TractorMarker({ tractor }: { tractor: Tractor }) {
+  if (!tractor.last_lat || !tractor.last_lon) return null;
+  
+  return (
+    <Marker
+      position={[tractor.last_lat, tractor.last_lon]}
+      icon={tractorIcon}
+    >
+      <Popup>
+        <div className="text-sm">
+          <strong className="font-display">{tractor.name}</strong>
+          <p className="text-muted-foreground">{tractor.identifier}</p>
+        </div>
+      </Popup>
+    </Marker>
+  );
 }
 
 export function FarmMap({
@@ -80,60 +134,21 @@ export function FarmMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       
-      <MapController center={center} zoom={zoom} />
+      <ZoomControl position="topright" />
       
-      {/* Render blocks as polygons */}
-      {blocks.map((block) => {
-        const metrics = blockMetrics[block.id];
-        const status = getBlockStatus(metrics);
-        const isSelected = block.id === selectedBlockId;
-        
-        // Convert GeoJSON coordinates to Leaflet format [lat, lon]
-        const positions = block.geometry_geojson.geometry.coordinates[0].map(
-          (coord: number[]) => [coord[1], coord[0]] as [number, number]
-        );
-        
-        return (
-          <Polygon
-            key={block.id}
-            positions={positions}
-            pathOptions={{
-              color: getBlockColor(status),
-              fillColor: getBlockColor(status),
-              fillOpacity: isSelected ? 0.5 : 0.3,
-              weight: isSelected ? 3 : 2,
-            }}
-            eventHandlers={{
-              click: () => onBlockClick(block),
-            }}
-          >
-            <Popup>
-              <div className="text-sm">
-                <strong className="font-display">{block.name}</strong>
-                {block.crop && <p className="text-muted-foreground">{block.crop}</p>}
-              </div>
-            </Popup>
-          </Polygon>
-        );
-      })}
+      {blocks.map((block) => (
+        <BlockPolygon
+          key={block.id}
+          block={block}
+          metrics={blockMetrics[block.id]}
+          isSelected={block.id === selectedBlockId}
+          onClick={() => onBlockClick(block)}
+        />
+      ))}
       
-      {/* Render tractors as markers */}
-      {tractors
-        .filter((t) => t.last_lat && t.last_lon)
-        .map((tractor) => (
-          <Marker
-            key={tractor.id}
-            position={[tractor.last_lat!, tractor.last_lon!]}
-            icon={tractorIcon}
-          >
-            <Popup>
-              <div className="text-sm">
-                <strong className="font-display">{tractor.name}</strong>
-                <p className="text-muted-foreground">{tractor.identifier}</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+      {tractors.map((tractor) => (
+        <TractorMarker key={tractor.id} tractor={tractor} />
+      ))}
     </MapContainer>
   );
 }
