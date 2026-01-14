@@ -1,8 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import L, { type Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet-draw';
+import 'leaflet-draw/dist/leaflet.draw.css';
 import type { Block, BlockMetrics, Tractor } from '@/types/farm';
 import { getBlockStatus } from '@/types/farm';
+import type { Feature, Polygon } from 'geojson';
 
 // Fix for default marker icons in Leaflet with Vite
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -21,6 +24,8 @@ interface FarmMapProps {
   center: [number, number];
   zoom: number;
   onMapReady?: (map: LeafletMap) => void;
+  onBlockDrawn?: (geometry: Feature<Polygon>) => void;
+  enableDrawing?: boolean;
 }
 
 const tractorIcon = new L.DivIcon({
@@ -60,11 +65,41 @@ export function FarmMap({
   center,
   zoom,
   onMapReady,
+  onBlockDrawn,
+  enableDrawing = true,
 }: FarmMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const polygonLayersRef = useRef<Map<string, L.Polygon>>(new Map());
   const tractorMarkersRef = useRef<Map<string, L.Marker>>(new Map());
+  const drawControlRef = useRef<L.Control.Draw | null>(null);
+  const drawnItemsRef = useRef<L.FeatureGroup>(new L.FeatureGroup());
+
+  // Handle draw created event
+  const handleDrawCreated = useCallback((e: L.LeafletEvent) => {
+    const event = e as L.DrawEvents.Created;
+    const layer = event.layer as L.Polygon;
+    
+    // Get coordinates from the drawn polygon
+    const latlngs = layer.getLatLngs()[0] as L.LatLng[];
+    const coordinates = latlngs.map((ll) => [ll.lng, ll.lat]);
+    // Close the polygon
+    coordinates.push(coordinates[0]);
+
+    const feature: Feature<Polygon> = {
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'Polygon',
+        coordinates: [coordinates],
+      },
+    };
+
+    onBlockDrawn?.(feature);
+    
+    // Remove the temporary drawn layer (we'll render it properly when saved)
+    drawnItemsRef.current.clearLayers();
+  }, [onBlockDrawn]);
 
   // Create map once
   useEffect(() => {
@@ -82,12 +117,54 @@ export function FarmMap({
 
     map.setView(center, zoom);
 
+    // Add drawn items layer
+    drawnItemsRef.current.addTo(map);
+
+    // Add draw control if enabled
+    if (enableDrawing) {
+      const drawControl = new L.Control.Draw({
+        position: 'topleft',
+        draw: {
+          polygon: {
+            allowIntersection: false,
+            showArea: true,
+            shapeOptions: {
+              color: '#22c55e',
+              fillOpacity: 0.3,
+            },
+          },
+          rectangle: {
+            showArea: true,
+            shapeOptions: {
+              color: '#22c55e',
+              fillOpacity: 0.3,
+            },
+          },
+          circle: false,
+          circlemarker: false,
+          marker: false,
+          polyline: false,
+        },
+        edit: {
+          featureGroup: drawnItemsRef.current,
+          remove: false,
+          edit: false,
+        },
+      });
+      drawControl.addTo(map);
+      drawControlRef.current = drawControl;
+
+      map.on(L.Draw.Event.CREATED, handleDrawCreated);
+    }
+
     mapRef.current = map;
     onMapReady?.(map);
 
     return () => {
+      map.off(L.Draw.Event.CREATED, handleDrawCreated);
       map.remove();
       mapRef.current = null;
+      drawControlRef.current = null;
       polygonLayersRef.current.clear();
       tractorMarkersRef.current.clear();
     };
@@ -154,32 +231,60 @@ export function FarmMap({
     const map = mapRef.current;
     if (!map) return;
 
-    tractorMarkersRef.current.forEach((m) => m.remove());
-    tractorMarkersRef.current.clear();
-
     tractors.forEach((tractor) => {
       if (!tractor.last_lat || !tractor.last_lon) return;
 
-      const marker = L.marker([tractor.last_lat, tractor.last_lon], {
-        icon: tractorIcon,
-      });
+      const existingMarker = tractorMarkersRef.current.get(tractor.id);
+      
+      if (existingMarker) {
+        // Update position smoothly
+        existingMarker.setLatLng([tractor.last_lat, tractor.last_lon]);
+      } else {
+        // Create new marker
+        const marker = L.marker([tractor.last_lat, tractor.last_lon], {
+          icon: tractorIcon,
+        });
 
-      const popup = document.createElement('div');
-      popup.className = 'text-sm';
-      const strong = document.createElement('strong');
-      strong.className = 'font-display';
-      strong.textContent = tractor.name;
-      popup.appendChild(strong);
-      const p = document.createElement('p');
-      p.className = 'text-muted-foreground';
-      p.textContent = tractor.identifier;
-      popup.appendChild(p);
-      marker.bindPopup(popup);
+        const popup = document.createElement('div');
+        popup.className = 'text-sm';
+        const strong = document.createElement('strong');
+        strong.className = 'font-display';
+        strong.textContent = tractor.name;
+        popup.appendChild(strong);
+        const p = document.createElement('p');
+        p.className = 'text-muted-foreground';
+        p.textContent = tractor.identifier;
+        popup.appendChild(p);
+        marker.bindPopup(popup);
 
-      marker.addTo(map);
-      tractorMarkersRef.current.set(tractor.id, marker);
+        marker.addTo(map);
+        tractorMarkersRef.current.set(tractor.id, marker);
+      }
+    });
+
+    // Remove markers for tractors that no longer exist
+    tractorMarkersRef.current.forEach((marker, id) => {
+      if (!tractors.find(t => t.id === id)) {
+        marker.remove();
+        tractorMarkersRef.current.delete(id);
+      }
     });
   }, [tractors]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return (
+    <div ref={containerRef} className="h-full w-full">
+      {blocks.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[500]">
+          <div className="bg-background/90 backdrop-blur-sm rounded-lg p-6 text-center max-w-sm shadow-lg pointer-events-auto">
+            <p className="text-muted-foreground mb-2">
+              No hay cuarteles aún
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Usa las herramientas de dibujo en la esquina superior izquierda para crear un cuartel, o carga un archivo GeoJSON.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 interface MapControlsProps {
   onZoomIn: () => void;
@@ -94,7 +95,10 @@ export function MapControls({
             <Button
               variant={isSimulatorRunning ? 'default' : 'ghost'}
               size="icon"
-              className="rounded-none"
+              className={cn(
+                "rounded-none relative",
+                isSimulatorRunning && "bg-primary text-primary-foreground"
+              )}
               onClick={onToggleSimulator}
             >
               {isSimulatorRunning ? (
@@ -102,10 +106,15 @@ export function MapControls({
               ) : (
                 <Play className="w-4 h-4" />
               )}
+              {isSimulatorRunning && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+              )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="left">
-            {isSimulatorRunning ? 'Pausar simulador GPS' : 'Iniciar simulador GPS'}
+          <TooltipContent side="left" className="max-w-[200px]">
+            {isSimulatorRunning 
+              ? 'Pausar simulador GPS' 
+              : 'Simular tractores moviéndose por los cuarteles (para demostración)'}
           </TooltipContent>
         </Tooltip>
       </div>
