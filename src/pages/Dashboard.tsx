@@ -22,6 +22,7 @@ import type { Block, BlockMetrics, Tractor, Alert, BlockVisit, VisitCoverageStat
 import { demoTractors, DEMO_MAP_CENTER, DEMO_MAP_ZOOM } from '@/lib/demoData';
 import type { Feature, Polygon } from 'geojson';
 import { Loader2 } from 'lucide-react';
+import * as turf from '@turf/turf';
 
 export default function Dashboard() {
   const { toast } = useToast();
@@ -122,6 +123,25 @@ export default function Dashboard() {
     onBlockVisit: handleBlockVisit,
     onMetricsUpdate: handleMetricsUpdate,
   });
+
+  // Fly to selected block when it changes
+  useEffect(() => {
+    if (selectedBlock && mapRef.current) {
+      try {
+        const bbox = turf.bbox(selectedBlock.geometry_geojson as turf.AllGeoJSON);
+        const bounds: [[number, number], [number, number]] = [
+          [bbox[0], bbox[1]], // southwest
+          [bbox[2], bbox[3]], // northeast
+        ];
+        mapRef.current.fitBounds(bounds, {
+          padding: 100,
+          duration: 1000,
+        });
+      } catch (error) {
+        console.error('Error calculating block bounds:', error);
+      }
+    }
+  }, [selectedBlock]);
 
   const handleBlockSelect = (block: Block) => {
     setSelectedBlock(block);
