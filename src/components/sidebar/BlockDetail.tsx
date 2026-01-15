@@ -1,15 +1,17 @@
-import { X, Clock, Calendar, Tractor, Bell, BellPlus, BellOff, CheckCircle, AlertTriangle, TrendingUp, Route, ChevronRight } from 'lucide-react';
+import { X, Clock, Calendar, Tractor, Bell, BellPlus, BellOff, CheckCircle, AlertTriangle, TrendingUp, Route, ChevronRight, Gauge, Target, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import type { Block, BlockMetrics, BlockVisit, Alert, Tractor as TractorType } from '@/types/farm';
+import type { Block, BlockMetrics, BlockVisit, Alert, Tractor as TractorType, GpsPing, VisitCoverageStats } from '@/types/farm';
 import { getBlockStatus, formatTimeSince, type BlockStatus } from '@/types/farm';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useBlockVisitStats, formatDuration } from '@/hooks/useBlockVisitStats';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
+import { BlockMiniMap } from './BlockMiniMap';
+import type { Feature, Polygon } from 'geojson';
 
 interface BlockDetailProps {
   block: Block;
@@ -22,6 +24,10 @@ interface BlockDetailProps {
   onToggleAlert: (alertId: string) => void;
   onVisitSelect?: (visit: BlockVisit) => void;
   selectedVisitId?: string | null;
+  visitPath?: GpsPing[];
+  coverageStats?: VisitCoverageStats | null;
+  onToggleMissedAreas?: () => void;
+  showMissedAreas?: boolean;
 }
 
 function StatusBadge({ status }: { status: BlockStatus }) {
@@ -175,6 +181,10 @@ export function BlockDetail({
   onToggleAlert,
   onVisitSelect,
   selectedVisitId,
+  visitPath,
+  coverageStats,
+  onToggleMissedAreas,
+  showMissedAreas,
 }: BlockDetailProps) {
   const status = getBlockStatus(metrics);
   const tractorMap = new Map(tractors.map((t) => [t.id, t]));
@@ -258,20 +268,18 @@ export function BlockDetail({
               <div className="mt-1 text-xl font-display font-semibold">
                 {metrics?.total_passes ?? 0}
               </div>
-              <div className="text-xs text-muted-foreground">
-                {metrics?.passes_24h ?? 0} hoy • {metrics?.passes_7d ?? 0} esta semana
-              </div>
+              <div className="text-xs text-muted-foreground">histórico total</div>
             </div>
 
             <div className="p-3 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-2 text-muted-foreground text-xs">
                 <TrendingUp className="w-3.5 h-3.5" />
-                Promedio/día
+                Promedio/mes
               </div>
               <div className="mt-1 text-xl font-display font-semibold">
-                {visitStats.averagePassesPerDay.toFixed(1)}
+                {visitStats.averagePassesPerMonth.toFixed(1)}
               </div>
-              <div className="text-xs text-muted-foreground">últimos 7 días</div>
+              <div className="text-xs text-muted-foreground">último año</div>
             </div>
 
             <div className="p-3 bg-muted/50 rounded-lg">
@@ -286,22 +294,86 @@ export function BlockDetail({
             </div>
           </div>
 
+          {/* Mini-map preview */}
+          <div>
+            <h3 className="font-medium text-sm flex items-center gap-2 mb-3">
+              <MapPin className="w-4 h-4" />
+              Vista del cuartel
+            </h3>
+            <BlockMiniMap 
+              block={block} 
+              visitPath={visitPath}
+              missedAreas={showMissedAreas ? coverageStats?.missedAreas : undefined}
+            />
+          </div>
+
+          {/* Coverage analysis (only when visit is selected) */}
+          {coverageStats && (
+            <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+              <h4 className="font-medium text-sm flex items-center gap-2 mb-3">
+                <Target className="w-4 h-4 text-primary" />
+                Análisis de cobertura
+              </h4>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div className="text-muted-foreground text-xs">Velocidad promedio</div>
+                  <div className="font-semibold">{coverageStats.averageSpeed.toFixed(1)} km/h</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Velocidad máxima</div>
+                  <div className="font-semibold">{coverageStats.maxSpeed.toFixed(1)} km/h</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Cobertura</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{coverageStats.coveragePercentage.toFixed(0)}%</span>
+                    <Badge 
+                      variant="outline" 
+                      className={cn(
+                        coverageStats.coveragePercentage >= 90 && 'bg-success/10 text-success border-success/30',
+                        coverageStats.coveragePercentage >= 70 && coverageStats.coveragePercentage < 90 && 'bg-warning/10 text-warning border-warning/30',
+                        coverageStats.coveragePercentage < 70 && 'bg-destructive/10 text-destructive border-destructive/30'
+                      )}
+                    >
+                      {coverageStats.coveragePercentage >= 90 ? 'Buena' : coverageStats.coveragePercentage >= 70 ? 'Regular' : 'Baja'}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Distancia recorrida</div>
+                  <div className="font-semibold">{(coverageStats.totalDistance / 1000).toFixed(2)} km</div>
+                </div>
+              </div>
+              {coverageStats.missedAreas.length > 0 && onToggleMissedAreas && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full mt-3"
+                  onClick={onToggleMissedAreas}
+                >
+                  {showMissedAreas ? 'Ocultar áreas sin cubrir' : 'Ver áreas sin cubrir'}
+                </Button>
+              )}
+            </div>
+          )}
+
           <Separator />
 
-          {/* Weekly bar chart */}
+          {/* Weekly bar chart - 3 months */}
           <div>
             <h3 className="font-medium text-sm flex items-center gap-2 mb-3">
               <Calendar className="w-4 h-4" />
-              Pasadas últimos 7 días
+              Pasadas últimos 3 meses
             </h3>
             <div className="h-32 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={visitStats.dailyPasses7d} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
+                <BarChart data={visitStats.weeklyPasses3m} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
                   <XAxis 
                     dataKey="label" 
-                    tick={{ fontSize: 10 }} 
+                    tick={{ fontSize: 9 }} 
                     axisLine={false}
                     tickLine={false}
+                    interval={1}
                   />
                   <YAxis 
                     tick={{ fontSize: 10 }} 
@@ -315,7 +387,7 @@ export function BlockDetail({
                         const data = payload[0].payload;
                         return (
                           <div className="bg-popover text-popover-foreground border rounded-lg shadow-lg px-3 py-2 text-sm">
-                            <p className="font-medium">{data.date}</p>
+                            <p className="font-medium">Semana del {data.weekStart}</p>
                             <p className="text-muted-foreground">{data.count} pasadas</p>
                           </div>
                         );
@@ -324,7 +396,7 @@ export function BlockDetail({
                     }}
                   />
                   <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                    {visitStats.dailyPasses7d.map((entry, index) => (
+                    {visitStats.weeklyPasses3m.map((entry, index) => (
                       <Cell 
                         key={`cell-${index}`} 
                         fill={entry.count > 0 ? 'hsl(var(--success))' : 'hsl(var(--muted-foreground) / 0.3)'} 
@@ -336,13 +408,13 @@ export function BlockDetail({
             </div>
           </div>
 
-          {/* Activity heatmap */}
+          {/* Activity heatmap - 90 days */}
           <div>
             <h3 className="font-medium text-sm flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4" />
-              Actividad últimos 30 días
+              Actividad últimos 90 días
             </h3>
-            <ActivityHeatmap dailyData={visitStats.dailyPasses30d} />
+            <ActivityHeatmap dailyData={visitStats.dailyPasses90d} />
             <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
               <span>Menos</span>
               <div className="flex gap-0.5">
