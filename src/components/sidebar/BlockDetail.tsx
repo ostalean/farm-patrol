@@ -1,14 +1,16 @@
-import { X, Clock, Calendar, Tractor, Bell, BellPlus, BellOff, CheckCircle, AlertTriangle, TrendingUp, Route, ChevronRight, Gauge, Target, MapPin } from 'lucide-react';
+import { X, Clock, Calendar, Tractor, Bell, BellPlus, BellOff, CheckCircle, AlertTriangle, TrendingUp, Route, ChevronRight, Gauge, Target, MapPin, Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, BlockVisit, Alert, Tractor as TractorType, GpsPing, VisitCoverageStats } from '@/types/farm';
 import { getBlockStatus, formatTimeSince, type BlockStatus } from '@/types/farm';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useBlockVisitStats, formatDuration } from '@/hooks/useBlockVisitStats';
+import { useReportExport } from '@/hooks/useReportExport';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import { BlockMiniMap } from './BlockMiniMap';
 import type { Feature, Polygon } from 'geojson';
@@ -189,11 +191,41 @@ export function BlockDetail({
   const status = getBlockStatus(metrics);
   const tractorMap = new Map(tractors.map((t) => [t.id, t]));
   const visitStats = useBlockVisitStats(visits);
+  const { exportToPDF, exportToCSV } = useReportExport();
   
   // Calculate hours since last visit
   const hoursSinceLastVisit = metrics?.last_seen_at
     ? Math.round((Date.now() - new Date(metrics.last_seen_at).getTime()) / (1000 * 60 * 60))
     : null;
+
+  // Find selected visit for export
+  const selectedVisit = selectedVisitId 
+    ? visits.find(v => v.id === selectedVisitId) 
+    : null;
+
+  const handleExportPDF = () => {
+    exportToPDF({
+      block,
+      metrics,
+      visits,
+      tractors,
+      visitStats,
+      selectedVisit,
+      coverageStats,
+    });
+  };
+
+  const handleExportCSV = () => {
+    exportToCSV({
+      block,
+      metrics,
+      visits,
+      tractors,
+      visitStats,
+      selectedVisit,
+      coverageStats,
+    });
+  };
 
   // Group visits by date
   const visitsByDate = visits.reduce((acc, visit) => {
@@ -217,9 +249,28 @@ export function BlockDetail({
               {block.crop && ` • ${block.crop}`}
             </p>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" title="Exportar reporte">
+                  <Download className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportPDF}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Exportar como PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportCSV}>
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Exportar como CSV
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button variant="ghost" size="icon" onClick={onClose}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
         
         <div className="mt-3 flex items-center gap-2">
