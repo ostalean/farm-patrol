@@ -7,6 +7,7 @@ import { AppHeader } from '@/components/header/AppHeader';
 import { MapControls } from '@/components/controls/MapControls';
 import { AlertConfigDialog } from '@/components/dialogs/AlertConfigDialog';
 import { DeleteAlertDialog } from '@/components/dialogs/DeleteAlertDialog';
+import { ManageAlertsDialog } from '@/components/dialogs/ManageAlertsDialog';
 import { UploadGeoJSONDialog } from '@/components/dialogs/UploadGeoJSONDialog';
 import { CreateBlockDialog } from '@/components/dialogs/CreateBlockDialog';
 import { EditBlockDialog } from '@/components/dialogs/EditBlockDialog';
@@ -18,7 +19,7 @@ import { useVisitCoverage, generateDemoCoverageStats } from '@/hooks/useVisitCov
 import { useBlocks, useBlockMetrics, useCreateBlock, useCreateBlocksBatch, useUpdateBlock, useDeleteBlock } from '@/hooks/useBlocks';
 import { useVisits } from '@/hooks/useVisits';
 import { useTenant } from '@/hooks/useTenant';
-import { useAlerts, useCreateAlertsBatch, useDeleteAlert } from '@/hooks/useAlerts';
+import { useAlerts, useCreateAlertsBatch, useDeleteAlert, useDeleteAlertsBatch } from '@/hooks/useAlerts';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, Tractor, Alert, BlockVisit, VisitCoverageStats } from '@/types/farm';
 import { demoTractors, DEMO_MAP_CENTER, DEMO_MAP_ZOOM } from '@/lib/demoData';
@@ -44,6 +45,7 @@ export default function Dashboard() {
   const deleteBlock = useDeleteBlock();
   const createAlertsBatch = useCreateAlertsBatch();
   const deleteAlertMutation = useDeleteAlert();
+  const deleteAlertsBatch = useDeleteAlertsBatch();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null);
@@ -58,6 +60,7 @@ export default function Dashboard() {
   const [showMissedAreas, setShowMissedAreas] = useState(false);
   const [deleteAlertDialogOpen, setDeleteAlertDialogOpen] = useState(false);
   const [alertToDelete, setAlertToDelete] = useState<Alert | null>(null);
+  const [manageAlertsDialogOpen, setManageAlertsDialogOpen] = useState(false);
 
   // Local state for tractors (still demo for now)
   const [tractors, setTractors] = useState<Tractor[]>([]);
@@ -229,6 +232,21 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteAlertsBatch = async (ids: string[]) => {
+    if (!tenantId) return;
+    
+    try {
+      await deleteAlertsBatch.mutateAsync({ ids, tenantId });
+      toast({ 
+        title: `${ids.length} ${ids.length === 1 ? 'alerta eliminada' : 'alertas eliminadas'}`, 
+        description: 'Las alertas han sido eliminadas correctamente' 
+      });
+    } catch (error) {
+      console.error('Failed to delete alerts:', error);
+      toast({ title: 'Error', description: 'No se pudieron eliminar las alertas', variant: 'destructive' });
+    }
+  };
+
   const handleUploadGeoJSON = async (features: Feature<Polygon>[]) => {
     if (!tenantId) {
       toast({ title: 'Error', description: 'Debes iniciar sesión para crear cuarteles', variant: 'destructive' });
@@ -396,6 +414,7 @@ export default function Dashboard() {
           setSelectedBlock(null);
           setAlertDialogOpen(true);
         }}
+        onManageAlerts={() => setManageAlertsDialogOpen(true)}
       />
       
       <div className="flex-1 flex overflow-hidden">
@@ -525,6 +544,15 @@ export default function Dashboard() {
         onOpenChange={setDeleteAlertDialogOpen}
         alert={alertToDelete}
         onConfirm={handleConfirmDeleteAlert}
+      />
+
+      <ManageAlertsDialog
+        open={manageAlertsDialogOpen}
+        onOpenChange={setManageAlertsDialogOpen}
+        alerts={alerts}
+        blocks={blocks}
+        onDeleteAlerts={handleDeleteAlertsBatch}
+        isDeleting={deleteAlertsBatch.isPending}
       />
     </div>
   );
