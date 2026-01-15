@@ -1,9 +1,9 @@
-import { X, Clock, Calendar, Tractor, Bell, BellPlus, BellOff, CheckCircle, AlertTriangle, TrendingUp, Route, ChevronRight, Gauge, Target, MapPin, Download, FileText, FileSpreadsheet } from 'lucide-react';
+import { X, Clock, Calendar, Tractor, Bell, BellPlus, BellOff, CheckCircle, AlertTriangle, TrendingUp, Route, ChevronRight, Gauge, Target, MapPin, Download, FileText, FileSpreadsheet, Pencil, Trash2, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, BlockVisit, Alert, Tractor as TractorType, GpsPing, VisitCoverageStats } from '@/types/farm';
 import { getBlockStatus, formatTimeSince, type BlockStatus } from '@/types/farm';
@@ -30,6 +30,8 @@ interface BlockDetailProps {
   coverageStats?: VisitCoverageStats | null;
   onToggleMissedAreas?: () => void;
   showMissedAreas?: boolean;
+  onEditBlock?: () => void;
+  onDeleteBlock?: () => void;
 }
 
 function StatusBadge({ status }: { status: BlockStatus }) {
@@ -187,6 +189,8 @@ export function BlockDetail({
   coverageStats,
   onToggleMissedAreas,
   showMissedAreas,
+  onEditBlock,
+  onDeleteBlock,
 }: BlockDetailProps) {
   const status = getBlockStatus(metrics);
   const tractorMap = new Map(tractors.map((t) => [t.id, t]));
@@ -252,8 +256,8 @@ export function BlockDetail({
           <div className="flex items-center gap-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" title="Exportar reporte">
-                  <Download className="w-4 h-4" />
+                <Button variant="ghost" size="icon" title="Más opciones">
+                  <MoreVertical className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -264,6 +268,18 @@ export function BlockDetail({
                 <DropdownMenuItem onClick={handleExportCSV}>
                   <FileSpreadsheet className="w-4 h-4 mr-2" />
                   Exportar como CSV
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onEditBlock}>
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Editar cuartel
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={onDeleteBlock}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Eliminar cuartel
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
