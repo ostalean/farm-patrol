@@ -15,6 +15,7 @@ import { useGpsSimulator } from '@/hooks/useGpsSimulator';
 import { useVisitPath } from '@/hooks/useVisitPath';
 import { useVisitCoverage, generateDemoCoverageStats } from '@/hooks/useVisitCoverage';
 import { useBlocks, useBlockMetrics, useCreateBlock, useCreateBlocksBatch, useUpdateBlock, useDeleteBlock } from '@/hooks/useBlocks';
+import { useVisits } from '@/hooks/useVisits';
 import { useTenant } from '@/hooks/useTenant';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, Tractor, Alert, BlockVisit, VisitCoverageStats } from '@/types/farm';
@@ -32,6 +33,7 @@ export default function Dashboard() {
   // Fetch blocks and metrics from database
   const { data: dbBlocks, isLoading: blocksLoading } = useBlocks(tenantId);
   const { data: dbMetrics, isLoading: metricsLoading } = useBlockMetrics(tenantId);
+  const { data: dbVisits, isLoading: visitsLoading } = useVisits(tenantId);
   const createBlock = useCreateBlock();
   const createBlocksBatch = useCreateBlocksBatch();
   const updateBlock = useUpdateBlock();
@@ -49,12 +51,14 @@ export default function Dashboard() {
   const [mapCenter, setMapCenter] = useState<[number, number]>(DEMO_MAP_CENTER);
   const [showMissedAreas, setShowMissedAreas] = useState(false);
 
-  // Local state for tractors, alerts, visits (still demo for now)
+  // Local state for tractors, alerts (still demo for now)
   const [tractors, setTractors] = useState<Tractor[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [visits, setVisits] = useState<BlockVisit[]>([]);
   const [selectedVisit, setSelectedVisit] = useState<BlockVisit | null>(null);
   const [demoCoverageStats, setDemoCoverageStats] = useState<VisitCoverageStats | null>(null);
+
+  // Use database visits
+  const visits = dbVisits || [];
 
   // Use database blocks and metrics
   const blocks = dbBlocks || [];
@@ -80,33 +84,7 @@ export default function Dashboard() {
     setTractors(demoTractorsWithIds);
   }, [tenantId]);
 
-  // Generate demo visits when blocks are loaded
-  useEffect(() => {
-    if (blocks.length === 0 || tractors.length === 0) return;
-    
-    const demoVisits: BlockVisit[] = [];
-    blocks.forEach((block, blockIdx) => {
-      const visitCount = 3 + Math.floor(Math.random() * 5);
-      for (let v = 0; v < visitCount; v++) {
-        const daysAgo = v + Math.random() * 2;
-        const startTime = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-        const duration = 20 + Math.random() * 40;
-        const endTime = new Date(startTime.getTime() + duration * 60 * 1000);
-        
-        demoVisits.push({
-          id: `visit-${block.id}-${v}`,
-          tenant_id: tenantId || 'demo-tenant',
-          block_id: block.id,
-          tractor_id: tractors[v % tractors.length].id,
-          started_at: startTime.toISOString(),
-          ended_at: endTime.toISOString(),
-          ping_count: Math.floor(duration * 2),
-          created_at: startTime.toISOString(),
-        });
-      }
-    });
-    setVisits(demoVisits);
-  }, [blocks, tractors, tenantId]);
+  // Note: Visits are now fetched from database via useVisits hook
 
   // GPS Simulator
   const handleTractorMove = useCallback((tractorId: string, lat: number, lon: number) => {
@@ -333,7 +311,7 @@ export default function Dashboard() {
   const blockAlerts = selectedBlock ? alerts.filter(a => a.block_id === selectedBlock.id) : [];
   const blockVisits = selectedBlock ? visits.filter(v => v.block_id === selectedBlock.id) : [];
 
-  const isLoading = tenantLoading || blocksLoading || metricsLoading;
+  const isLoading = tenantLoading || blocksLoading || metricsLoading || visitsLoading;
 
   if (isLoading) {
     return (
