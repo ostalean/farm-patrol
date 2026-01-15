@@ -11,8 +11,9 @@ import { CreateBlockDialog } from '@/components/dialogs/CreateBlockDialog';
 import { useToast } from '@/hooks/use-toast';
 import { useGpsSimulator } from '@/hooks/useGpsSimulator';
 import { useVisitPath } from '@/hooks/useVisitPath';
+import { useVisitCoverage, generateDemoCoverageStats } from '@/hooks/useVisitCoverage';
 import { cn } from '@/lib/utils';
-import type { Block, BlockMetrics, Tractor, Alert, BlockVisit } from '@/types/farm';
+import type { Block, BlockMetrics, Tractor, Alert, BlockVisit, VisitCoverageStats } from '@/types/farm';
 import { demoBlocks, demoTractors, generateDemoMetrics, DEMO_MAP_CENTER, DEMO_MAP_ZOOM } from '@/lib/demoData';
 import type { Feature, Polygon } from 'geojson';
 
@@ -28,6 +29,7 @@ export default function Dashboard() {
   const [drawnGeometry, setDrawnGeometry] = useState<Feature<Polygon> | null>(null);
   const [isSimulatorRunning, setIsSimulatorRunning] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>(DEMO_MAP_CENTER);
+  const [showMissedAreas, setShowMissedAreas] = useState(false);
 
   // Demo data state
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -36,9 +38,16 @@ export default function Dashboard() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [visits, setVisits] = useState<BlockVisit[]>([]);
   const [selectedVisit, setSelectedVisit] = useState<BlockVisit | null>(null);
+  const [demoCoverageStats, setDemoCoverageStats] = useState<VisitCoverageStats | null>(null);
 
   // Fetch path for selected visit
   const { pings: visitPathPings } = useVisitPath(selectedVisit);
+
+  // Calculate coverage stats from path
+  const { stats: realCoverageStats } = useVisitCoverage(selectedBlock, visitPathPings);
+  
+  // Use demo coverage stats in demo mode (when real stats can't be calculated)
+  const coverageStats = realCoverageStats || demoCoverageStats;
 
   // Initialize demo data
   useEffect(() => {
@@ -135,15 +144,32 @@ export default function Dashboard() {
   const handleBlockSelect = (block: Block) => {
     setSelectedBlock(block);
     setSelectedVisit(null); // Clear any selected visit when changing blocks
+    setShowMissedAreas(false);
+    setDemoCoverageStats(null);
     setSidebarOpen(true);
   };
 
   const handleVisitSelect = useCallback((visit: BlockVisit) => {
-    setSelectedVisit(prev => prev?.id === visit.id ? null : visit);
-  }, []);
+    const isDeselecting = selectedVisit?.id === visit.id;
+    setSelectedVisit(isDeselecting ? null : visit);
+    setShowMissedAreas(false);
+    
+    // Generate demo coverage stats when selecting a visit
+    if (!isDeselecting) {
+      setDemoCoverageStats(generateDemoCoverageStats());
+    } else {
+      setDemoCoverageStats(null);
+    }
+  }, [selectedVisit]);
 
   const handleClearPath = useCallback(() => {
     setSelectedVisit(null);
+    setShowMissedAreas(false);
+    setDemoCoverageStats(null);
+  }, []);
+
+  const handleToggleMissedAreas = useCallback(() => {
+    setShowMissedAreas(prev => !prev);
   }, []);
 
   const handleCreateAlert = (blockId: string, ruleHours: number) => {
@@ -296,11 +322,15 @@ export default function Dashboard() {
               visits={blockVisits}
               tractors={tractors}
               alerts={blockAlerts}
-              onClose={() => { setSelectedBlock(null); setSelectedVisit(null); }}
+              onClose={() => { setSelectedBlock(null); setSelectedVisit(null); setShowMissedAreas(false); setDemoCoverageStats(null); }}
               onConfigureAlert={() => setAlertDialogOpen(true)}
               onToggleAlert={() => {}}
               onVisitSelect={handleVisitSelect}
               selectedVisitId={selectedVisit?.id ?? null}
+              visitPath={visitPathPings}
+              coverageStats={coverageStats}
+              onToggleMissedAreas={handleToggleMissedAreas}
+              showMissedAreas={showMissedAreas}
             />
           ) : (
             <BlockList
@@ -331,6 +361,7 @@ export default function Dashboard() {
             enableDrawing={true}
             visitPath={visitPathPings}
             onClearPath={handleClearPath}
+            missedAreas={showMissedAreas ? coverageStats?.missedAreas : undefined}
           />
           
           <MapControls

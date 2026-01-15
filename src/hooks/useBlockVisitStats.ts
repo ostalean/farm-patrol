@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { BlockVisit } from '@/types/farm';
-import { subDays, format, startOfDay, eachDayOfInterval } from 'date-fns';
+import { subDays, subMonths, format, startOfDay, startOfWeek, eachDayOfInterval, eachWeekOfInterval } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 export interface DailyPassCount {
   date: string;
@@ -8,10 +9,16 @@ export interface DailyPassCount {
   label: string;
 }
 
+export interface WeeklyPassCount {
+  weekStart: string;
+  count: number;
+  label: string;
+}
+
 export interface BlockVisitStats {
-  dailyPasses7d: DailyPassCount[];
-  dailyPasses30d: DailyPassCount[];
-  averagePassesPerDay: number;
+  weeklyPasses3m: WeeklyPassCount[];
+  dailyPasses90d: DailyPassCount[];
+  averagePassesPerMonth: number;
   totalDuration: number; // in minutes
   averageDuration: number; // in minutes
 }
@@ -19,30 +26,43 @@ export interface BlockVisitStats {
 export function useBlockVisitStats(visits: BlockVisit[]): BlockVisitStats {
   return useMemo(() => {
     const now = new Date();
-    const sevenDaysAgo = subDays(now, 7);
-    const thirtyDaysAgo = subDays(now, 30);
+    const threeMonthsAgo = subMonths(now, 3);
+    const ninetyDaysAgo = subDays(now, 90);
+    const oneYearAgo = subMonths(now, 12);
 
-    // Create maps for counting
-    const last7Days = eachDayOfInterval({ start: sevenDaysAgo, end: now });
-    const last30Days = eachDayOfInterval({ start: thirtyDaysAgo, end: now });
-
+    // Create maps for counting by day and week
     const countByDay = new Map<string, number>();
+    const countByWeek = new Map<string, number>();
+    const countByMonth = new Map<string, number>();
     
     visits.forEach(visit => {
-      const dayKey = format(startOfDay(new Date(visit.started_at)), 'yyyy-MM-dd');
+      const visitDate = new Date(visit.started_at);
+      const dayKey = format(startOfDay(visitDate), 'yyyy-MM-dd');
+      const weekKey = format(startOfWeek(visitDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+      const monthKey = format(visitDate, 'yyyy-MM');
+      
       countByDay.set(dayKey, (countByDay.get(dayKey) || 0) + 1);
+      countByWeek.set(weekKey, (countByWeek.get(weekKey) || 0) + 1);
+      countByMonth.set(monthKey, (countByMonth.get(monthKey) || 0) + 1);
     });
 
-    const dailyPasses7d: DailyPassCount[] = last7Days.map(day => {
-      const dateKey = format(day, 'yyyy-MM-dd');
+    // Weekly passes for last 3 months (12 weeks)
+    const weeks = eachWeekOfInterval(
+      { start: threeMonthsAgo, end: now },
+      { weekStartsOn: 1 }
+    );
+    const weeklyPasses3m: WeeklyPassCount[] = weeks.map((weekStart, idx) => {
+      const weekKey = format(weekStart, 'yyyy-MM-dd');
       return {
-        date: dateKey,
-        count: countByDay.get(dateKey) || 0,
-        label: format(day, 'EEE'),
+        weekStart: weekKey,
+        count: countByWeek.get(weekKey) || 0,
+        label: `S${idx + 1}`,
       };
     });
 
-    const dailyPasses30d: DailyPassCount[] = last30Days.map(day => {
+    // Daily passes for last 90 days (heatmap)
+    const last90Days = eachDayOfInterval({ start: ninetyDaysAgo, end: now });
+    const dailyPasses90d: DailyPassCount[] = last90Days.map(day => {
       const dateKey = format(day, 'yyyy-MM-dd');
       return {
         date: dateKey,
@@ -51,9 +71,14 @@ export function useBlockVisitStats(visits: BlockVisit[]): BlockVisitStats {
       };
     });
 
-    // Calculate averages
-    const totalPasses = visits.length;
-    const averagePassesPerDay = totalPasses > 0 ? totalPasses / 7 : 0;
+    // Calculate monthly average (last 12 months)
+    const visitsLastYear = visits.filter(v => new Date(v.started_at) >= oneYearAgo);
+    const monthsWithData = new Set(
+      visitsLastYear.map(v => format(new Date(v.started_at), 'yyyy-MM'))
+    ).size;
+    const averagePassesPerMonth = monthsWithData > 0 
+      ? visitsLastYear.length / Math.max(monthsWithData, 1)
+      : 0;
 
     // Calculate durations
     let totalDuration = 0;
@@ -66,9 +91,9 @@ export function useBlockVisitStats(visits: BlockVisit[]): BlockVisitStats {
     const averageDuration = visits.length > 0 ? totalDuration / visits.length : 0;
 
     return {
-      dailyPasses7d,
-      dailyPasses30d,
-      averagePassesPerDay,
+      weeklyPasses3m,
+      dailyPasses90d,
+      averagePassesPerMonth,
       totalDuration,
       averageDuration,
     };

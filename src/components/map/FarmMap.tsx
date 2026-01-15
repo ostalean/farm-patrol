@@ -33,6 +33,7 @@ interface FarmMapProps {
   enableDrawing?: boolean;
   visitPath?: GpsPing[];
   onClearPath?: () => void;
+  missedAreas?: Feature<Polygon>[];
 }
 
 function getBlockColor(status: ReturnType<typeof getBlockStatus>): string {
@@ -59,6 +60,7 @@ export function FarmMap({
   enableDrawing = true,
   visitPath,
   onClearPath,
+  missedAreas,
 }: FarmMapProps) {
   const mapRef = useRef<MapRef>(null);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -156,6 +158,15 @@ export function FarmMap({
       points: { type: 'FeatureCollection', features: [startPoint, endPoint] } as FeatureCollection,
     };
   }, [visitPath]);
+
+  // Missed areas GeoJSON
+  const missedAreasData = useMemo<FeatureCollection | null>(() => {
+    if (!missedAreas || missedAreas.length === 0) return null;
+    return {
+      type: 'FeatureCollection',
+      features: missedAreas,
+    };
+  }, [missedAreas]);
 
   const handleMapLoad = useCallback(() => {
     if (mapRef.current) {
@@ -395,7 +406,28 @@ export function FarmMap({
           </>
         )}
 
-        {/* Tractor markers */}
+        {/* Missed areas overlay */}
+        {missedAreasData && (
+          <Source id="missed-areas" type="geojson" data={missedAreasData}>
+            <Layer
+              id="missed-areas-fill"
+              type="fill"
+              paint={{
+                'fill-color': '#ef4444',
+                'fill-opacity': 0.4,
+              }}
+            />
+            <Layer
+              id="missed-areas-outline"
+              type="line"
+              paint={{
+                'line-color': '#ef4444',
+                'line-width': 2,
+                'line-dasharray': [2, 2],
+              }}
+            />
+          </Source>
+        )}
         {tractors.map((tractor) => {
           if (!tractor.last_lat || !tractor.last_lon) return null;
           return (

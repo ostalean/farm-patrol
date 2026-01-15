@@ -90,6 +90,15 @@ export interface VisitWithPath extends BlockVisit {
   pings: GpsPing[];
 }
 
+export interface VisitCoverageStats {
+  averageSpeed: number;        // km/h
+  maxSpeed: number;            // km/h
+  coveragePercentage: number;  // 0-100
+  coveredArea: number;         // hectares
+  totalDistance: number;       // meters
+  missedAreas: Feature<Polygon>[];
+}
+
 // Helper type for block status calculation
 export type BlockStatus = 'healthy' | 'warning' | 'critical';
 
