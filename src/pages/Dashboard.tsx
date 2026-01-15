@@ -18,6 +18,7 @@ import { useVisitCoverage, generateDemoCoverageStats } from '@/hooks/useVisitCov
 import { useBlocks, useBlockMetrics, useCreateBlock, useCreateBlocksBatch, useUpdateBlock, useDeleteBlock } from '@/hooks/useBlocks';
 import { useVisits } from '@/hooks/useVisits';
 import { useTenant } from '@/hooks/useTenant';
+import { useAlerts, useCreateAlertsBatch, useDeleteAlert } from '@/hooks/useAlerts';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, Tractor, Alert, BlockVisit, VisitCoverageStats } from '@/types/farm';
 import { demoTractors, DEMO_MAP_CENTER, DEMO_MAP_ZOOM } from '@/lib/demoData';
@@ -36,10 +37,13 @@ export default function Dashboard() {
   const { data: dbBlocks, isLoading: blocksLoading } = useBlocks(tenantId);
   const { data: dbMetrics, isLoading: metricsLoading } = useBlockMetrics(tenantId);
   const { data: dbVisits, isLoading: visitsLoading } = useVisits(tenantId);
+  const { data: dbAlerts, isLoading: alertsLoading } = useAlerts(tenantId);
   const createBlock = useCreateBlock();
   const createBlocksBatch = useCreateBlocksBatch();
   const updateBlock = useUpdateBlock();
   const deleteBlock = useDeleteBlock();
+  const createAlertsBatch = useCreateAlertsBatch();
+  const deleteAlertMutation = useDeleteAlert();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null);
@@ -55,11 +59,13 @@ export default function Dashboard() {
   const [deleteAlertDialogOpen, setDeleteAlertDialogOpen] = useState(false);
   const [alertToDelete, setAlertToDelete] = useState<Alert | null>(null);
 
-  // Local state for tractors, alerts (still demo for now)
+  // Local state for tractors (still demo for now)
   const [tractors, setTractors] = useState<Tractor[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [selectedVisit, setSelectedVisit] = useState<BlockVisit | null>(null);
   const [demoCoverageStats, setDemoCoverageStats] = useState<VisitCoverageStats | null>(null);
+
+  // Use database alerts
+  const alerts = dbAlerts || [];
 
   // Use database visits
   const visits = dbVisits || [];
@@ -177,24 +183,31 @@ export default function Dashboard() {
     setShowMissedAreas(prev => !prev);
   }, []);
 
-  const handleCreateAlerts = (blockIds: string[], ruleHours: number, isRecurring: boolean = true) => {
-    const newAlerts: Alert[] = blockIds.map((blockId, index) => ({
-      id: `alert-${Date.now()}-${index}`,
-      tenant_id: 'demo-tenant',
-      block_id: blockId,
-      rule_hours: ruleHours,
-      is_recurring: isRecurring,
-      status: 'active' as const,
-      last_triggered_at: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }));
-    setAlerts(prev => [...prev, ...newAlerts]);
-    const alertDays = Math.round(ruleHours / 24);
-    if (blockIds.length === 1) {
-      toast({ title: 'Alerta creada', description: `Se notificará si no hay pasada en ${alertDays} ${alertDays === 1 ? 'día' : 'días'}` });
-    } else {
-      toast({ title: `${blockIds.length} alertas creadas`, description: `Se notificará si no hay pasada en ${alertDays} ${alertDays === 1 ? 'día' : 'días'}` });
+  const handleCreateAlerts = async (blockIds: string[], ruleHours: number, isRecurring: boolean = true) => {
+    if (!tenantId) {
+      toast({ title: 'Error', description: 'Debes iniciar sesión para crear alertas', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const alertsToCreate = blockIds.map((blockId) => ({
+        tenant_id: tenantId,
+        block_id: blockId,
+        rule_hours: ruleHours,
+        is_recurring: isRecurring,
+      }));
+
+      await createAlertsBatch.mutateAsync(alertsToCreate);
+      
+      const alertDays = Math.round(ruleHours / 24);
+      if (blockIds.length === 1) {
+        toast({ title: 'Alerta creada', description: `Se notificará si no hay pasada en ${alertDays} ${alertDays === 1 ? 'día' : 'días'}` });
+      } else {
+        toast({ title: `${blockIds.length} alertas creadas`, description: `Se notificará si no hay pasada en ${alertDays} ${alertDays === 1 ? 'día' : 'días'}` });
+      }
+    } catch (error) {
+      console.error('Failed to create alerts:', error);
+      toast({ title: 'Error', description: 'No se pudieron crear las alertas', variant: 'destructive' });
     }
   };
 
@@ -203,10 +216,17 @@ export default function Dashboard() {
     setDeleteAlertDialogOpen(true);
   };
 
-  const handleConfirmDeleteAlert = (alertId: string) => {
-    setAlerts(prev => prev.filter(a => a.id !== alertId));
-    setAlertToDelete(null);
-    toast({ title: 'Alerta eliminada', description: 'La alerta ha sido eliminada correctamente' });
+  const handleConfirmDeleteAlert = async (alertId: string) => {
+    if (!tenantId) return;
+    
+    try {
+      await deleteAlertMutation.mutateAsync({ id: alertId, tenantId });
+      setAlertToDelete(null);
+      toast({ title: 'Alerta eliminada', description: 'La alerta ha sido eliminada correctamente' });
+    } catch (error) {
+      console.error('Failed to delete alert:', error);
+      toast({ title: 'Error', description: 'No se pudo eliminar la alerta', variant: 'destructive' });
+    }
   };
 
   const handleUploadGeoJSON = async (features: Feature<Polygon>[]) => {
@@ -351,7 +371,7 @@ export default function Dashboard() {
   const blockAlerts = selectedBlock ? alerts.filter(a => a.block_id === selectedBlock.id) : [];
   const blockVisits = selectedBlock ? visits.filter(v => v.block_id === selectedBlock.id) : [];
 
-  const isLoading = tenantLoading || blocksLoading || metricsLoading || visitsLoading;
+  const isLoading = tenantLoading || blocksLoading || metricsLoading || visitsLoading || alertsLoading;
 
   if (isLoading) {
     return (
