@@ -245,7 +245,7 @@ export default function Dashboard() {
         </aside>
 
         {/* Map */}
-        <main className="flex-1 relative overflow-hidden">
+        <main className="flex-1 relative overflow-hidden isolate z-0">
           <FarmMap
             blocks={blocks}
             blockMetrics={blockMetrics}
