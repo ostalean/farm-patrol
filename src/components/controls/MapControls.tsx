@@ -29,7 +29,7 @@ export function MapControls({
   onRefreshData,
 }: MapControlsProps) {
   return (
-    <div className="absolute right-4 top-4 z-[1000] flex flex-col gap-2">
+    <div className="absolute right-4 top-4 z-20 flex flex-col gap-2">
       {/* Zoom controls */}
       <div className="map-control flex flex-col overflow-hidden">
         <Tooltip>

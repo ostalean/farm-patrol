@@ -211,3 +211,24 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23ef4444' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2'/%3E%3C/svg%3E") !important;
   background-size: 18px !important;
 }
+
+/* Map shell - contain Mapbox internal z-index layers */
+.map-shell {
+  isolation: isolate;
+}
+
+.map-shell .mapboxgl-canvas {
+  z-index: 0 !important;
+}
+
+.map-shell .mapboxgl-control-container {
+  z-index: 5 !important;
+}
+
+.map-shell .mapboxgl-popup {
+  z-index: 10 !important;
+}
+
+.map-shell .mapboxgl-ctrl-group {
+  z-index: 5 !important;
+}

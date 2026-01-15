@@ -13,6 +13,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Demo context for DEV-only visual testing
+const DemoAuthContext = createContext<AuthContextType | undefined>(undefined);
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -71,7 +74,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// DEV-only: Provider that supplies a fake user for visual testing
+export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
+  const demoUser = { email: 'demo@agrotrack.com', id: 'demo-user-id' } as User;
+  
+  const value: AuthContextType = {
+    user: demoUser,
+    session: null,
+    loading: false,
+    signIn: async () => ({ error: null }),
+    signUp: async () => ({ error: null }),
+    signOut: async () => {},
+  };
+  
+  return (
+    <DemoAuthContext.Provider value={value}>
+      {children}
+    </DemoAuthContext.Provider>
+  );
+}
+
 export function useAuth() {
+  // Check demo context first (DEV-only)
+  const demoContext = useContext(DemoAuthContext);
+  if (demoContext !== undefined) {
+    return demoContext;
+  }
+  
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');

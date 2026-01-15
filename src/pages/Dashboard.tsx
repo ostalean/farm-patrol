@@ -214,11 +214,12 @@ export default function Dashboard() {
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
       />
       
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Sidebar */}
         <aside className={cn(
           'w-80 border-r border-border bg-card flex-shrink-0 transition-all duration-300 overflow-hidden',
-          'absolute md:relative inset-y-16 md:inset-y-0 z-30',
+          'fixed left-0 top-16 bottom-0 md:relative md:top-0 md:left-auto md:bottom-auto',
+          'z-[100]',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full md:w-0 md:translate-x-0'
         )}>
           {selectedBlock ? (
@@ -245,7 +246,7 @@ export default function Dashboard() {
         </aside>
 
         {/* Map */}
-        <main className="flex-1 relative overflow-hidden isolate z-0">
+        <main className="flex-1 relative overflow-hidden isolate z-0 map-shell">
           <FarmMap
             blocks={blocks}
             blockMetrics={blockMetrics}
