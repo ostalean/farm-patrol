@@ -69,3 +69,23 @@ export function useDeleteAlert() {
     },
   });
 }
+
+export function useDeleteAlertsBatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ ids, tenantId }: { ids: string[]; tenantId: string }) => {
+      const { error } = await supabase
+        .from('alerts')
+        .delete()
+        .in('id', ids)
+        .eq('tenant_id', tenantId);
+
+      if (error) throw error;
+      return { ids, tenantId };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['alerts', data.tenantId] });
+    },
+  });
+}
