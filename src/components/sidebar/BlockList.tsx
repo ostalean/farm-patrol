@@ -174,12 +174,12 @@ export function BlockList({
                   !isSelected && 'border border-transparent'
                 )}
               >
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 w-full">
                   <StatusIcon status={status} className="shrink-0" />
                   
                   <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="font-medium truncate">{block.name}</span>
+                      <span className="font-medium truncate min-w-0 flex-1">{block.name}</span>
                       {hasTriggeredAlert && (
                         <Bell className="w-3 h-3 text-destructive animate-pulse shrink-0" />
                       )}
