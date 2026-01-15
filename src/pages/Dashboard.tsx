@@ -12,14 +12,26 @@ import { useToast } from '@/hooks/use-toast';
 import { useGpsSimulator } from '@/hooks/useGpsSimulator';
 import { useVisitPath } from '@/hooks/useVisitPath';
 import { useVisitCoverage, generateDemoCoverageStats } from '@/hooks/useVisitCoverage';
+import { useBlocks, useBlockMetrics, useCreateBlock, useCreateBlocksBatch } from '@/hooks/useBlocks';
+import { useTenant } from '@/hooks/useTenant';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, Tractor, Alert, BlockVisit, VisitCoverageStats } from '@/types/farm';
-import { demoBlocks, demoTractors, generateDemoMetrics, DEMO_MAP_CENTER, DEMO_MAP_ZOOM } from '@/lib/demoData';
+import { demoTractors, DEMO_MAP_CENTER, DEMO_MAP_ZOOM } from '@/lib/demoData';
 import type { Feature, Polygon } from 'geojson';
+import { Loader2 } from 'lucide-react';
 
 export default function Dashboard() {
   const { toast } = useToast();
   const mapRef = useRef<MapRef | null>(null);
+
+  // Get tenant for database operations
+  const { tenantId, isLoading: tenantLoading } = useTenant();
+
+  // Fetch blocks and metrics from database
+  const { data: dbBlocks, isLoading: blocksLoading } = useBlocks(tenantId);
+  const { data: dbMetrics, isLoading: metricsLoading } = useBlockMetrics(tenantId);
+  const createBlock = useCreateBlock();
+  const createBlocksBatch = useCreateBlocksBatch();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null);
@@ -31,14 +43,16 @@ export default function Dashboard() {
   const [mapCenter, setMapCenter] = useState<[number, number]>(DEMO_MAP_CENTER);
   const [showMissedAreas, setShowMissedAreas] = useState(false);
 
-  // Demo data state
-  const [blocks, setBlocks] = useState<Block[]>([]);
-  const [blockMetrics, setBlockMetrics] = useState<Record<string, BlockMetrics>>({});
+  // Local state for tractors, alerts, visits (still demo for now)
   const [tractors, setTractors] = useState<Tractor[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [visits, setVisits] = useState<BlockVisit[]>([]);
   const [selectedVisit, setSelectedVisit] = useState<BlockVisit | null>(null);
   const [demoCoverageStats, setDemoCoverageStats] = useState<VisitCoverageStats | null>(null);
+
+  // Use database blocks and metrics
+  const blocks = dbBlocks || [];
+  const blockMetrics = dbMetrics || {};
 
   // Fetch path for selected visit
   const { pings: visitPathPings } = useVisitPath(selectedVisit);
@@ -49,56 +63,44 @@ export default function Dashboard() {
   // Use demo coverage stats in demo mode (when real stats can't be calculated)
   const coverageStats = realCoverageStats || demoCoverageStats;
 
-  // Initialize demo data
+  // Initialize demo tractors
   useEffect(() => {
-    const demoBlocksWithIds: Block[] = demoBlocks.map((b, i) => ({
-      ...b,
-      id: `block-${i}`,
-      tenant_id: 'demo-tenant',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }));
-    
-    const metrics: Record<string, BlockMetrics> = {};
-    demoBlocksWithIds.forEach((block, i) => {
-      metrics[block.id] = { id: `metric-${i}`, ...generateDemoMetrics(block.id, i) };
-    });
-    
     const demoTractorsWithIds: Tractor[] = demoTractors.map((t, i) => ({
       ...t,
       id: `tractor-${i}`,
-      tenant_id: 'demo-tenant',
+      tenant_id: tenantId || 'demo-tenant',
       created_at: new Date().toISOString(),
     }));
+    setTractors(demoTractorsWithIds);
+  }, [tenantId]);
 
-    // Generate demo visits for each block
+  // Generate demo visits when blocks are loaded
+  useEffect(() => {
+    if (blocks.length === 0 || tractors.length === 0) return;
+    
     const demoVisits: BlockVisit[] = [];
-    demoBlocksWithIds.forEach((block, blockIdx) => {
-      const visitCount = 3 + Math.floor(Math.random() * 5); // 3-7 visits per block
+    blocks.forEach((block, blockIdx) => {
+      const visitCount = 3 + Math.floor(Math.random() * 5);
       for (let v = 0; v < visitCount; v++) {
         const daysAgo = v + Math.random() * 2;
         const startTime = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-        const duration = 20 + Math.random() * 40; // 20-60 min
+        const duration = 20 + Math.random() * 40;
         const endTime = new Date(startTime.getTime() + duration * 60 * 1000);
         
         demoVisits.push({
-          id: `visit-${blockIdx}-${v}`,
-          tenant_id: 'demo-tenant',
+          id: `visit-${block.id}-${v}`,
+          tenant_id: tenantId || 'demo-tenant',
           block_id: block.id,
-          tractor_id: demoTractorsWithIds[v % demoTractorsWithIds.length].id,
+          tractor_id: tractors[v % tractors.length].id,
           started_at: startTime.toISOString(),
           ended_at: endTime.toISOString(),
-          ping_count: Math.floor(duration * 2), // ~2 pings per minute
+          ping_count: Math.floor(duration * 2),
           created_at: startTime.toISOString(),
         });
       }
     });
-
-    setBlocks(demoBlocksWithIds);
-    setBlockMetrics(metrics);
-    setTractors(demoTractorsWithIds);
     setVisits(demoVisits);
-  }, []);
+  }, [blocks, tractors, tenantId]);
 
   // GPS Simulator
   const handleTractorMove = useCallback((tractorId: string, lat: number, lon: number) => {
@@ -120,15 +122,11 @@ export default function Dashboard() {
     }
   }, [blocks, tractors, toast]);
 
-  const handleMetricsUpdate = useCallback((blockId: string, updates: Partial<BlockMetrics>) => {
-    setBlockMetrics(prev => ({
-      ...prev,
-      [blockId]: {
-        ...prev[blockId],
-        ...updates,
-        updated_at: new Date().toISOString(),
-      },
-    }));
+  // Note: handleMetricsUpdate is a no-op since we now fetch metrics from DB
+  // In production, metrics would be updated by backend triggers
+  const handleMetricsUpdate = useCallback((_blockId: string, _updates: Partial<BlockMetrics>) => {
+    // Metrics are fetched from database, not updated locally
+    // In production, a trigger would update block_metrics when a visit completes
   }, []);
 
   useGpsSimulator({
@@ -187,28 +185,35 @@ export default function Dashboard() {
     toast({ title: 'Alerta creada', description: `Se notificará si no hay pasada en ${ruleHours}h` });
   };
 
-  const handleUploadGeoJSON = (features: Feature<Polygon>[]) => {
-    const newBlocks: Block[] = features.map((f, i) => ({
-      id: `uploaded-${Date.now()}-${i}`,
-      tenant_id: 'demo-tenant',
-      name: (f.properties?.name as string) || `Cuartel ${blocks.length + i + 1}`,
-      farm_name: (f.properties?.farm_name as string) || null,
-      crop: (f.properties?.crop as string) || null,
-      geometry_geojson: f,
-      metadata: f.properties || {},
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }));
-    
-    setBlocks(prev => [...prev, ...newBlocks]);
-    
-    // Center map on new blocks
-    if (newBlocks.length > 0) {
-      const firstCoord = newBlocks[0].geometry_geojson.geometry.coordinates[0][0];
-      setMapCenter([firstCoord[1], firstCoord[0]]);
+  const handleUploadGeoJSON = async (features: Feature<Polygon>[]) => {
+    if (!tenantId) {
+      toast({ title: 'Error', description: 'Debes iniciar sesión para crear cuarteles', variant: 'destructive' });
+      return;
     }
-    
-    toast({ title: 'Cuarteles importados', description: `${newBlocks.length} cuartel(es) agregado(s)` });
+
+    try {
+      const blocksToCreate = features.map((f, i) => ({
+        tenant_id: tenantId,
+        name: (f.properties?.name as string) || `Cuartel ${blocks.length + i + 1}`,
+        farm_name: (f.properties?.farm_name as string) || null,
+        crop: (f.properties?.crop as string) || null,
+        geometry_geojson: f,
+        metadata: f.properties || {},
+      }));
+
+      const newBlocks = await createBlocksBatch.mutateAsync(blocksToCreate);
+      
+      // Center map on new blocks
+      if (newBlocks.length > 0) {
+        const firstCoord = newBlocks[0].geometry_geojson.geometry.coordinates[0][0];
+        setMapCenter([firstCoord[1], firstCoord[0]]);
+      }
+      
+      toast({ title: 'Cuarteles importados', description: `${newBlocks.length} cuartel(es) agregado(s)` });
+    } catch (error) {
+      console.error('Failed to import blocks:', error);
+      toast({ title: 'Error', description: 'No se pudieron importar los cuarteles', variant: 'destructive' });
+    }
   };
 
   const handleBlockDrawn = (geometry: Feature<Polygon>) => {
@@ -216,36 +221,28 @@ export default function Dashboard() {
     setCreateBlockDialogOpen(true);
   };
 
-  const handleSaveDrawnBlock = (data: { name: string; farmName: string; crop: string; geometry: Feature<Polygon> }) => {
-    const newBlock: Block = {
-      id: `drawn-${Date.now()}`,
-      tenant_id: 'demo-tenant',
-      name: data.name,
-      farm_name: data.farmName || null,
-      crop: data.crop || null,
-      geometry_geojson: data.geometry,
-      metadata: {},
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+  const handleSaveDrawnBlock = async (data: { name: string; farmName: string; crop: string; geometry: Feature<Polygon> }) => {
+    if (!tenantId) {
+      toast({ title: 'Error', description: 'Debes iniciar sesión para crear cuarteles', variant: 'destructive' });
+      return;
+    }
 
-    // Add initial metrics
-    const newMetrics: BlockMetrics = {
-      id: `metric-${Date.now()}`,
-      block_id: newBlock.id,
-      last_seen_at: null,
-      last_tractor_id: null,
-      total_passes: 0,
-      passes_24h: 0,
-      passes_7d: 0,
-      updated_at: new Date().toISOString(),
-    };
-
-    setBlocks(prev => [...prev, newBlock]);
-    setBlockMetrics(prev => ({ ...prev, [newBlock.id]: newMetrics }));
-    setDrawnGeometry(null);
-    
-    toast({ title: 'Cuartel creado', description: `${data.name} agregado al mapa` });
+    try {
+      await createBlock.mutateAsync({
+        tenant_id: tenantId,
+        name: data.name,
+        farm_name: data.farmName || null,
+        crop: data.crop || null,
+        geometry_geojson: data.geometry,
+        metadata: {},
+      });
+      
+      setDrawnGeometry(null);
+      toast({ title: 'Cuartel creado', description: `${data.name} agregado al mapa` });
+    } catch (error) {
+      console.error('Failed to create block:', error);
+      toast({ title: 'Error', description: 'No se pudo crear el cuartel', variant: 'destructive' });
+    }
   };
 
   const handleToggleSimulator = () => {
@@ -285,6 +282,22 @@ export default function Dashboard() {
   const triggeredAlerts = alerts.filter(a => a.status === 'triggered');
   const blockAlerts = selectedBlock ? alerts.filter(a => a.block_id === selectedBlock.id) : [];
   const blockVisits = selectedBlock ? visits.filter(v => v.block_id === selectedBlock.id) : [];
+
+  const isLoading = tenantLoading || blocksLoading || metricsLoading;
+
+  if (isLoading) {
+    return (
+      <div className="h-screen flex flex-col bg-background">
+        <AppHeader triggeredAlerts={[]} onToggleSidebar={() => {}} />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Cargando cuarteles...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col bg-background">
