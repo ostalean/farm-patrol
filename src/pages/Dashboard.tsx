@@ -6,6 +6,7 @@ import { BlockDetail } from '@/components/sidebar/BlockDetail';
 import { AppHeader } from '@/components/header/AppHeader';
 import { MapControls } from '@/components/controls/MapControls';
 import { AlertConfigDialog } from '@/components/dialogs/AlertConfigDialog';
+import { DeleteAlertDialog } from '@/components/dialogs/DeleteAlertDialog';
 import { UploadGeoJSONDialog } from '@/components/dialogs/UploadGeoJSONDialog';
 import { CreateBlockDialog } from '@/components/dialogs/CreateBlockDialog';
 import { EditBlockDialog } from '@/components/dialogs/EditBlockDialog';
@@ -51,6 +52,8 @@ export default function Dashboard() {
   const [isSimulatorRunning, setIsSimulatorRunning] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>(DEMO_MAP_CENTER);
   const [showMissedAreas, setShowMissedAreas] = useState(false);
+  const [deleteAlertDialogOpen, setDeleteAlertDialogOpen] = useState(false);
+  const [alertToDelete, setAlertToDelete] = useState<Alert | null>(null);
 
   // Local state for tractors, alerts (still demo for now)
   const [tractors, setTractors] = useState<Tractor[]>([]);
@@ -189,6 +192,17 @@ export default function Dashboard() {
     setAlerts(prev => [...prev, newAlert]);
     const alertDays = Math.round(ruleHours / 24);
     toast({ title: 'Alerta creada', description: `Se notificará si no hay pasada en ${alertDays} ${alertDays === 1 ? 'día' : 'días'}` });
+  };
+
+  const handleDeleteAlertClick = (alert: Alert) => {
+    setAlertToDelete(alert);
+    setDeleteAlertDialogOpen(true);
+  };
+
+  const handleConfirmDeleteAlert = (alertId: string) => {
+    setAlerts(prev => prev.filter(a => a.id !== alertId));
+    setAlertToDelete(null);
+    toast({ title: 'Alerta eliminada', description: 'La alerta ha sido eliminada correctamente' });
   };
 
   const handleUploadGeoJSON = async (features: Feature<Polygon>[]) => {
@@ -388,6 +402,7 @@ export default function Dashboard() {
               onClose={() => { setSelectedBlock(null); setSelectedVisit(null); setShowMissedAreas(false); setDemoCoverageStats(null); }}
               onConfigureAlert={() => setAlertDialogOpen(true)}
               onToggleAlert={() => {}}
+              onDeleteAlert={handleDeleteAlertClick}
               onVisitSelect={handleVisitSelect}
               selectedVisitId={selectedVisit?.id ?? null}
               visitPath={visitPathPings}
@@ -474,6 +489,13 @@ export default function Dashboard() {
         block={selectedBlock}
         onConfirm={handleDeleteBlock}
         isLoading={deleteBlock.isPending}
+      />
+
+      <DeleteAlertDialog
+        open={deleteAlertDialogOpen}
+        onOpenChange={setDeleteAlertDialogOpen}
+        alert={alertToDelete}
+        onConfirm={handleConfirmDeleteAlert}
       />
     </div>
   );

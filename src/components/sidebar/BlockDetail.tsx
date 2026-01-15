@@ -24,6 +24,7 @@ interface BlockDetailProps {
   onClose: () => void;
   onConfigureAlert: () => void;
   onToggleAlert: (alertId: string) => void;
+  onDeleteAlert?: (alert: Alert) => void;
   onVisitSelect?: (visit: BlockVisit) => void;
   selectedVisitId?: string | null;
   visitPath?: GpsPing[];
@@ -247,6 +248,7 @@ export function BlockDetail({
   onClose,
   onConfigureAlert,
   onToggleAlert,
+  onDeleteAlert,
   onVisitSelect,
   selectedVisitId,
   visitPath,
@@ -550,17 +552,31 @@ export function BlockDetail({
                           {alert.status === 'resolved' && 'Resuelta'}
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onToggleAlert(alert.id)}
-                      >
-                        {alert.status === 'active' ? (
-                          <BellOff className="w-4 h-4" />
-                        ) : (
-                          <Bell className="w-4 h-4" />
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onToggleAlert(alert.id)}
+                          title={alert.status === 'active' ? 'Pausar alerta' : 'Reactivar alerta'}
+                        >
+                          {alert.status === 'active' ? (
+                            <BellOff className="w-4 h-4" />
+                          ) : (
+                            <Bell className="w-4 h-4" />
+                          )}
+                        </Button>
+                        {onDeleteAlert && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onDeleteAlert(alert)}
+                            title="Eliminar alerta"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         )}
-                      </Button>
+                      </div>
                     </div>
                   );
                 })}
