@@ -398,7 +398,7 @@ export default function Dashboard() {
   if (isLoading) {
     return (
       <div className="h-screen flex flex-col bg-background">
-        <AppHeader triggeredAlerts={[]} onToggleSidebar={() => {}} />
+        <AppHeader triggeredAlerts={[]} blocks={[]} onToggleSidebar={() => {}} />
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -412,13 +412,15 @@ export default function Dashboard() {
   return (
     <div className="h-screen flex flex-col bg-background">
       <AppHeader 
-        triggeredAlerts={triggeredAlerts} 
+        triggeredAlerts={triggeredAlerts}
+        blocks={blocks}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         onCreateBulkAlerts={() => {
           setSelectedBlock(null);
           setAlertDialogOpen(true);
         }}
         onManageAlerts={() => setManageAlertsDialogOpen(true)}
+        onBlockClick={handleBlockSelect}
       />
       
       <div className="flex-1 flex overflow-hidden">
@@ -493,6 +495,7 @@ export default function Dashboard() {
             visitPath={visitPathPings}
             onClearPath={handleClearPath}
             missedAreas={showMissedAreas ? coverageStats?.missedAreas : undefined}
+            alerts={alerts}
           />
           
           <MapControls

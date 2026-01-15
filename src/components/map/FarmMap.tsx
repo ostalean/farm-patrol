@@ -10,8 +10,8 @@ import Map, {
 } from 'react-map-gl';
 import mapboxgl from 'mapbox-gl';
 import type { Feature, FeatureCollection, Polygon, LineString, Point } from 'geojson';
-import type { Block, BlockMetrics, Tractor, GpsPing } from '@/types/farm';
-import { getBlockStatus } from '@/types/farm';
+import type { Block, BlockMetrics, Tractor, GpsPing, Alert } from '@/types/farm';
+import { getBlockStatus, getAlertEffectiveStatus } from '@/types/farm';
 import { DrawControl } from './DrawControl';
 import { AlertTriangle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,7 @@ interface FarmMapProps {
   visitPath?: GpsPing[];
   onClearPath?: () => void;
   missedAreas?: Feature<Polygon>[];
+  alerts?: Alert[];
 }
 
 function getBlockColor(status: ReturnType<typeof getBlockStatus>): string {
@@ -61,6 +62,7 @@ export function FarmMap({
   visitPath,
   onClearPath,
   missedAreas,
+  alerts = [],
 }: FarmMapProps) {
   const mapRef = useRef<MapRef>(null);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -121,6 +123,28 @@ export function FarmMap({
         : null,
     };
   }, [blocks, blockMetrics, selectedBlockId]);
+
+  // Create a feature collection for blocks with triggered alerts (for pulsing animation)
+  const alertedBlocks = useMemo<FeatureCollection>(() => {
+    const alertedBlockIds = new Set<string>();
+    alerts.forEach((alert) => {
+      const metrics = blockMetrics[alert.block_id];
+      if (getAlertEffectiveStatus(alert, metrics?.last_seen_at ?? null) === 'triggered') {
+        alertedBlockIds.add(alert.block_id);
+      }
+    });
+
+    const features: Feature<Polygon>[] = blocks
+      .filter((block) => alertedBlockIds.has(block.id))
+      .map((block) => ({
+        type: 'Feature',
+        id: block.id,
+        properties: { id: block.id, name: block.name },
+        geometry: block.geometry_geojson.geometry,
+      }));
+
+    return { type: 'FeatureCollection', features };
+  }, [blocks, blockMetrics, alerts]);
 
   // Convert visit path to GeoJSON LineString
   const pathData = useMemo(() => {
@@ -339,6 +363,30 @@ export function FarmMap({
             }}
           />
         </Source>
+
+        {/* Alerted blocks - pulsing border */}
+        {alertedBlocks.features.length > 0 && (
+          <Source id="blocks-alerted" type="geojson" data={alertedBlocks}>
+            <Layer
+              id="blocks-alerted-outline-glow"
+              type="line"
+              paint={{
+                'line-color': '#ef4444',
+                'line-width': 6,
+                'line-opacity': 0.4,
+              }}
+            />
+            <Layer
+              id="blocks-alerted-outline"
+              type="line"
+              paint={{
+                'line-color': '#ef4444',
+                'line-width': 3,
+                'line-dasharray': [3, 2],
+              }}
+            />
+          </Source>
+        )}
 
         {/* Selected block highlight */}
         {selectedBlock && (

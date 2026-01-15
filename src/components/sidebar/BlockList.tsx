@@ -38,6 +38,7 @@ export function BlockList({
 }: BlockListProps) {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'time'>('time');
+  const [filterAlerts, setFilterAlerts] = useState(false);
 
   const alertsByBlock = useMemo(() => {
     const map: Record<string, Alert[]> = {};
@@ -49,11 +50,25 @@ export function BlockList({
   }, [alerts]);
 
   const sortedBlocks = useMemo(() => {
-    let filtered = blocks.filter((block) =>
-      block.name.toLowerCase().includes(search.toLowerCase()) ||
-      block.farm_name?.toLowerCase().includes(search.toLowerCase()) ||
-      block.crop?.toLowerCase().includes(search.toLowerCase())
-    );
+    let filtered = blocks.filter((block) => {
+      const matchesSearch = block.name.toLowerCase().includes(search.toLowerCase()) ||
+        block.farm_name?.toLowerCase().includes(search.toLowerCase()) ||
+        block.crop?.toLowerCase().includes(search.toLowerCase());
+      
+      if (!matchesSearch) return false;
+      
+      // Filter by triggered alerts if enabled
+      if (filterAlerts) {
+        const blockAlerts = alertsByBlock[block.id] || [];
+        const metrics = blockMetrics[block.id];
+        const hasTriggeredAlert = blockAlerts.some(a =>
+          getAlertEffectiveStatus(a, metrics?.last_seen_at ?? null) === 'triggered'
+        );
+        return hasTriggeredAlert;
+      }
+      
+      return true;
+    });
 
     if (sortBy === 'time') {
       filtered.sort((a, b) => {
@@ -71,7 +86,7 @@ export function BlockList({
     }
 
     return filtered;
-  }, [blocks, blockMetrics, search, sortBy]);
+  }, [blocks, blockMetrics, search, sortBy, filterAlerts, alertsByBlock]);
 
   // Calculate effective triggered alerts based on metrics
   const triggeredAlerts = alerts.filter((alert) => {
@@ -104,13 +119,27 @@ export function BlockList({
         
         <div className="flex gap-2">
           <Button
+            variant={filterAlerts ? 'destructive' : 'outline'}
+            size="sm"
+            onClick={() => setFilterAlerts(!filterAlerts)}
+            className="relative"
+            title="Filtrar cuarteles con alertas"
+          >
+            <Bell className="w-3 h-3" />
+            {filterAlerts && triggeredAlerts.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] rounded-full flex items-center justify-center border border-background">
+                {triggeredAlerts.length}
+              </span>
+            )}
+          </Button>
+          <Button
             variant={sortBy === 'time' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setSortBy('time')}
             className="flex-1"
           >
             <Clock className="w-3 h-3 mr-1" />
-            Más tiempo sin pasada
+            Más antiguo
           </Button>
           <Button
             variant={sortBy === 'name' ? 'default' : 'outline'}
