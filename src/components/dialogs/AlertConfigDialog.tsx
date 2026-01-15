@@ -34,6 +34,7 @@ export function AlertConfigDialog({
   onSave,
 }: AlertConfigDialogProps) {
   const [ruleDays, setRuleDays] = useState(2);
+  const [customDaysInput, setCustomDaysInput] = useState('2');
   const [isRecurring, setIsRecurring] = useState(true);
   const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
   const [isMultiMode, setIsMultiMode] = useState(false);
@@ -41,6 +42,8 @@ export function AlertConfigDialog({
   // Reset selection when dialog opens
   useEffect(() => {
     if (open) {
+      setRuleDays(2);
+      setCustomDaysInput('2');
       if (block) {
         // Single block mode - pre-select it
         setSelectedBlockIds(new Set([block.id]));
@@ -52,6 +55,22 @@ export function AlertConfigDialog({
       }
     }
   }, [open, block]);
+
+  // Sync custom input when ruleDays changes from presets
+  const handlePresetClick = (days: number) => {
+    setRuleDays(days);
+    setCustomDaysInput(days.toString());
+  };
+
+  const handleCustomDaysBlur = () => {
+    const parsed = parseInt(customDaysInput, 10);
+    if (!isNaN(parsed) && parsed >= 1 && parsed <= 30) {
+      setRuleDays(parsed);
+    } else {
+      // Reset to current valid value
+      setCustomDaysInput(ruleDays.toString());
+    }
+  };
 
   const handleToggleBlock = (blockId: string) => {
     setSelectedBlockIds(prev => {
@@ -199,7 +218,7 @@ export function AlertConfigDialog({
                   key={days}
                   variant={ruleDays === days ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setRuleDays(days)}
+                  onClick={() => handlePresetClick(days)}
                 >
                   {days}d
                 </Button>
@@ -215,8 +234,14 @@ export function AlertConfigDialog({
               type="number"
               min={1}
               max={30}
-              value={ruleDays}
-              onChange={(e) => setRuleDays(Math.max(1, Math.min(30, parseInt(e.target.value) || 2)))}
+              value={customDaysInput}
+              onChange={(e) => setCustomDaysInput(e.target.value)}
+              onBlur={handleCustomDaysBlur}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleCustomDaysBlur();
+                }
+              }}
             />
           </div>
 
