@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, Alert } from '@/types/farm';
-import { getBlockStatus, formatTimeSince, formatTimeSinceCompact, type BlockStatus } from '@/types/farm';
+import { getBlockStatus, formatTimeSince, formatTimeSinceCompact, getAlertEffectiveStatus, type BlockStatus } from '@/types/farm';
 
 interface BlockListProps {
   blocks: Block[];
@@ -73,7 +73,11 @@ export function BlockList({
     return filtered;
   }, [blocks, blockMetrics, search, sortBy]);
 
-  const triggeredAlerts = alerts.filter((a) => a.status === 'triggered');
+  // Calculate effective triggered alerts based on metrics
+  const triggeredAlerts = alerts.filter((alert) => {
+    const metrics = blockMetrics[alert.block_id];
+    return getAlertEffectiveStatus(alert, metrics?.last_seen_at ?? null) === 'triggered';
+  });
 
   return (
     <div className="h-full flex flex-col">
@@ -125,7 +129,9 @@ export function BlockList({
             const metrics = blockMetrics[block.id];
             const status = getBlockStatus(metrics);
             const blockAlerts = alertsByBlock[block.id] || [];
-            const hasTriggeredAlert = blockAlerts.some((a) => a.status === 'triggered');
+            const hasTriggeredAlert = blockAlerts.some((a) => 
+              getAlertEffectiveStatus(a, metrics?.last_seen_at ?? null) === 'triggered'
+            );
             const isSelected = block.id === selectedBlockId;
 
             return (

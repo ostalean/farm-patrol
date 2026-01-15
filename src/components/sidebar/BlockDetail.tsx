@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, BlockVisit, Alert, Tractor as TractorType, GpsPing, VisitCoverageStats } from '@/types/farm';
-import { getBlockStatus, formatTimeSince, type BlockStatus } from '@/types/farm';
+import { getBlockStatus, formatTimeSince, getAlertEffectiveStatus, type BlockStatus } from '@/types/farm';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useBlockVisitStats, formatDuration } from '@/hooks/useBlockVisitStats';
@@ -479,14 +479,15 @@ export function BlockDetail({
               <div className="space-y-2">
                 {alerts.map((alert) => {
                   const alertDays = Math.round(alert.rule_hours / 24);
+                  const effectiveStatus = getAlertEffectiveStatus(alert, metrics?.last_seen_at ?? null);
                   return (
                     <div
                       key={alert.id}
                       className={cn(
                         'p-3 rounded-lg border flex items-center justify-between',
-                        alert.status === 'triggered' && 'bg-destructive/5 border-destructive/30',
-                        alert.status === 'active' && 'bg-muted/50 border-border',
-                        alert.status === 'resolved' && 'bg-success/5 border-success/30 opacity-60'
+                        effectiveStatus === 'triggered' && 'bg-destructive/5 border-destructive/30',
+                        effectiveStatus === 'active' && 'bg-muted/50 border-border',
+                        effectiveStatus === 'resolved' && 'bg-success/5 border-success/30 opacity-60'
                       )}
                     >
                       <div>
@@ -497,9 +498,9 @@ export function BlockDetail({
                           </Badge>
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {alert.status === 'triggered' && 'Alerta activa'}
-                          {alert.status === 'active' && 'Monitoreando'}
-                          {alert.status === 'resolved' && 'Resuelta'}
+                          {effectiveStatus === 'triggered' && '⚠️ Alerta disparada'}
+                          {effectiveStatus === 'active' && 'Monitoreando'}
+                          {effectiveStatus === 'resolved' && 'Resuelta'}
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
@@ -507,9 +508,9 @@ export function BlockDetail({
                           variant="ghost"
                           size="sm"
                           onClick={() => onToggleAlert(alert.id)}
-                          title={alert.status === 'active' ? 'Pausar alerta' : 'Reactivar alerta'}
+                          title={effectiveStatus === 'active' ? 'Pausar alerta' : 'Reactivar alerta'}
                         >
-                          {alert.status === 'active' ? (
+                          {effectiveStatus === 'active' ? (
                             <BellOff className="w-4 h-4" />
                           ) : (
                             <Bell className="w-4 h-4" />
