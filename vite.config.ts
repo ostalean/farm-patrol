@@ -19,6 +19,6 @@ export default defineConfig(({ mode }) => ({
     },
   },
   optimizeDeps: {
-    include: ['mapbox-gl', 'react-map-gl'],
+    include: ['react', 'react-dom', 'mapbox-gl', 'react-map-gl'],
   },
 }));
