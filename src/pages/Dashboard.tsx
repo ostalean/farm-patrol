@@ -10,6 +10,7 @@ import { UploadGeoJSONDialog } from '@/components/dialogs/UploadGeoJSONDialog';
 import { CreateBlockDialog } from '@/components/dialogs/CreateBlockDialog';
 import { useToast } from '@/hooks/use-toast';
 import { useGpsSimulator } from '@/hooks/useGpsSimulator';
+import { useVisitPath } from '@/hooks/useVisitPath';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, Tractor, Alert, BlockVisit } from '@/types/farm';
 import { demoBlocks, demoTractors, generateDemoMetrics, DEMO_MAP_CENTER, DEMO_MAP_ZOOM } from '@/lib/demoData';
@@ -34,6 +35,10 @@ export default function Dashboard() {
   const [tractors, setTractors] = useState<Tractor[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [visits, setVisits] = useState<BlockVisit[]>([]);
+  const [selectedVisit, setSelectedVisit] = useState<BlockVisit | null>(null);
+
+  // Fetch path for selected visit
+  const { pings: visitPathPings } = useVisitPath(selectedVisit);
 
   // Initialize demo data
   useEffect(() => {
@@ -57,9 +62,33 @@ export default function Dashboard() {
       created_at: new Date().toISOString(),
     }));
 
+    // Generate demo visits for each block
+    const demoVisits: BlockVisit[] = [];
+    demoBlocksWithIds.forEach((block, blockIdx) => {
+      const visitCount = 3 + Math.floor(Math.random() * 5); // 3-7 visits per block
+      for (let v = 0; v < visitCount; v++) {
+        const daysAgo = v + Math.random() * 2;
+        const startTime = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+        const duration = 20 + Math.random() * 40; // 20-60 min
+        const endTime = new Date(startTime.getTime() + duration * 60 * 1000);
+        
+        demoVisits.push({
+          id: `visit-${blockIdx}-${v}`,
+          tenant_id: 'demo-tenant',
+          block_id: block.id,
+          tractor_id: demoTractorsWithIds[v % demoTractorsWithIds.length].id,
+          started_at: startTime.toISOString(),
+          ended_at: endTime.toISOString(),
+          ping_count: Math.floor(duration * 2), // ~2 pings per minute
+          created_at: startTime.toISOString(),
+        });
+      }
+    });
+
     setBlocks(demoBlocksWithIds);
     setBlockMetrics(metrics);
     setTractors(demoTractorsWithIds);
+    setVisits(demoVisits);
   }, []);
 
   // GPS Simulator
@@ -105,8 +134,17 @@ export default function Dashboard() {
 
   const handleBlockSelect = (block: Block) => {
     setSelectedBlock(block);
+    setSelectedVisit(null); // Clear any selected visit when changing blocks
     setSidebarOpen(true);
   };
+
+  const handleVisitSelect = useCallback((visit: BlockVisit) => {
+    setSelectedVisit(prev => prev?.id === visit.id ? null : visit);
+  }, []);
+
+  const handleClearPath = useCallback(() => {
+    setSelectedVisit(null);
+  }, []);
 
   const handleCreateAlert = (blockId: string, ruleHours: number) => {
     const newAlert: Alert = {
@@ -258,9 +296,11 @@ export default function Dashboard() {
               visits={blockVisits}
               tractors={tractors}
               alerts={blockAlerts}
-              onClose={() => setSelectedBlock(null)}
+              onClose={() => { setSelectedBlock(null); setSelectedVisit(null); }}
               onConfigureAlert={() => setAlertDialogOpen(true)}
               onToggleAlert={() => {}}
+              onVisitSelect={handleVisitSelect}
+              selectedVisitId={selectedVisit?.id ?? null}
             />
           ) : (
             <BlockList
@@ -289,6 +329,8 @@ export default function Dashboard() {
             }}
             onBlockDrawn={handleBlockDrawn}
             enableDrawing={true}
+            visitPath={visitPathPings}
+            onClearPath={handleClearPath}
           />
           
           <MapControls

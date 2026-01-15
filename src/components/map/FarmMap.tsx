@@ -9,11 +9,12 @@ import Map, {
   type ViewState,
 } from 'react-map-gl';
 import mapboxgl from 'mapbox-gl';
-import type { Feature, FeatureCollection, Polygon } from 'geojson';
-import type { Block, BlockMetrics, Tractor } from '@/types/farm';
+import type { Feature, FeatureCollection, Polygon, LineString, Point } from 'geojson';
+import type { Block, BlockMetrics, Tractor, GpsPing } from '@/types/farm';
 import { getBlockStatus } from '@/types/farm';
 import { DrawControl } from './DrawControl';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 
@@ -30,6 +31,8 @@ interface FarmMapProps {
   onMapReady?: (map: MapRef) => void;
   onBlockDrawn?: (geometry: Feature<Polygon>) => void;
   enableDrawing?: boolean;
+  visitPath?: GpsPing[];
+  onClearPath?: () => void;
 }
 
 function getBlockColor(status: ReturnType<typeof getBlockStatus>): string {
@@ -54,6 +57,8 @@ export function FarmMap({
   onMapReady,
   onBlockDrawn,
   enableDrawing = true,
+  visitPath,
+  onClearPath,
 }: FarmMapProps) {
   const mapRef = useRef<MapRef>(null);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -114,6 +119,43 @@ export function FarmMap({
         : null,
     };
   }, [blocks, blockMetrics, selectedBlockId]);
+
+  // Convert visit path to GeoJSON LineString
+  const pathData = useMemo(() => {
+    if (!visitPath || visitPath.length < 2) return null;
+
+    const lineString: Feature<LineString> = {
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'LineString',
+        coordinates: visitPath.map(p => [p.lon, p.lat]),
+      },
+    };
+
+    const startPoint: Feature<Point> = {
+      type: 'Feature',
+      properties: { type: 'start' },
+      geometry: {
+        type: 'Point',
+        coordinates: [visitPath[0].lon, visitPath[0].lat],
+      },
+    };
+
+    const endPoint: Feature<Point> = {
+      type: 'Feature',
+      properties: { type: 'end' },
+      geometry: {
+        type: 'Point',
+        coordinates: [visitPath[visitPath.length - 1].lon, visitPath[visitPath.length - 1].lat],
+      },
+    };
+
+    return {
+      line: { type: 'FeatureCollection', features: [lineString] } as FeatureCollection,
+      points: { type: 'FeatureCollection', features: [startPoint, endPoint] } as FeatureCollection,
+    };
+  }, [visitPath]);
 
   const handleMapLoad = useCallback(() => {
     if (mapRef.current) {
@@ -309,6 +351,50 @@ export function FarmMap({
           </Source>
         )}
 
+        {/* Visit path line */}
+        {pathData && (
+          <>
+            <Source id="visit-path-line" type="geojson" data={pathData.line}>
+              <Layer
+                id="visit-path-line-bg"
+                type="line"
+                paint={{
+                  'line-color': '#ffffff',
+                  'line-width': 6,
+                  'line-opacity': 0.8,
+                }}
+              />
+              <Layer
+                id="visit-path-line-main"
+                type="line"
+                paint={{
+                  'line-color': '#3b82f6',
+                  'line-width': 3,
+                  'line-dasharray': [2, 1],
+                }}
+              />
+            </Source>
+            <Source id="visit-path-points" type="geojson" data={pathData.points}>
+              <Layer
+                id="visit-path-points-layer"
+                type="circle"
+                paint={{
+                  'circle-radius': 8,
+                  'circle-color': [
+                    'match',
+                    ['get', 'type'],
+                    'start', '#22c55e',
+                    'end', '#ef4444',
+                    '#3b82f6'
+                  ],
+                  'circle-stroke-width': 3,
+                  'circle-stroke-color': '#ffffff',
+                }}
+              />
+            </Source>
+          </>
+        )}
+
         {/* Tractor markers */}
         {tractors.map((tractor) => {
           if (!tractor.last_lat || !tractor.last_lon) return null;
@@ -376,6 +462,25 @@ export function FarmMap({
               Usa las herramientas de dibujo en la esquina superior izquierda para crear un
               cuartel, o carga un archivo GeoJSON.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Path overlay controls */}
+      {visitPath && visitPath.length > 0 && onClearPath && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+          <div className="bg-card border rounded-lg shadow-lg px-4 py-2 flex items-center gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <div className="w-3 h-3 rounded-full bg-success border-2 border-white shadow" />
+              <span className="text-muted-foreground">Inicio</span>
+              <div className="w-6 h-0.5 bg-primary/50" style={{ backgroundImage: 'repeating-linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary)) 4px, transparent 4px, transparent 8px)' }} />
+              <div className="w-3 h-3 rounded-full bg-destructive border-2 border-white shadow" />
+              <span className="text-muted-foreground">Fin</span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={onClearPath}>
+              <X className="w-4 h-4 mr-1" />
+              Cerrar
+            </Button>
           </div>
         </div>
       )}

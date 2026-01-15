@@ -86,6 +86,10 @@ export interface TractorWithPings extends Tractor {
   recent_pings: GpsPing[];
 }
 
+export interface VisitWithPath extends BlockVisit {
+  pings: GpsPing[];
+}
+
 // Helper type for block status calculation
 export type BlockStatus = 'healthy' | 'warning' | 'critical';
 
