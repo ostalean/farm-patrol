@@ -8,11 +8,13 @@ import { MapControls } from '@/components/controls/MapControls';
 import { AlertConfigDialog } from '@/components/dialogs/AlertConfigDialog';
 import { UploadGeoJSONDialog } from '@/components/dialogs/UploadGeoJSONDialog';
 import { CreateBlockDialog } from '@/components/dialogs/CreateBlockDialog';
+import { EditBlockDialog } from '@/components/dialogs/EditBlockDialog';
+import { DeleteBlockDialog } from '@/components/dialogs/DeleteBlockDialog';
 import { useToast } from '@/hooks/use-toast';
 import { useGpsSimulator } from '@/hooks/useGpsSimulator';
 import { useVisitPath } from '@/hooks/useVisitPath';
 import { useVisitCoverage, generateDemoCoverageStats } from '@/hooks/useVisitCoverage';
-import { useBlocks, useBlockMetrics, useCreateBlock, useCreateBlocksBatch } from '@/hooks/useBlocks';
+import { useBlocks, useBlockMetrics, useCreateBlock, useCreateBlocksBatch, useUpdateBlock, useDeleteBlock } from '@/hooks/useBlocks';
 import { useTenant } from '@/hooks/useTenant';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, Tractor, Alert, BlockVisit, VisitCoverageStats } from '@/types/farm';
@@ -32,12 +34,16 @@ export default function Dashboard() {
   const { data: dbMetrics, isLoading: metricsLoading } = useBlockMetrics(tenantId);
   const createBlock = useCreateBlock();
   const createBlocksBatch = useCreateBlocksBatch();
+  const updateBlock = useUpdateBlock();
+  const deleteBlock = useDeleteBlock();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null);
   const [alertDialogOpen, setAlertDialogOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [createBlockDialogOpen, setCreateBlockDialogOpen] = useState(false);
+  const [editBlockDialogOpen, setEditBlockDialogOpen] = useState(false);
+  const [deleteBlockDialogOpen, setDeleteBlockDialogOpen] = useState(false);
   const [drawnGeometry, setDrawnGeometry] = useState<Feature<Polygon> | null>(null);
   const [isSimulatorRunning, setIsSimulatorRunning] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>(DEMO_MAP_CENTER);
@@ -245,6 +251,50 @@ export default function Dashboard() {
     }
   };
 
+  const handleEditBlock = async (data: { id: string; name: string; farmName: string | null; crop: string | null }) => {
+    if (!tenantId) return;
+
+    try {
+      await updateBlock.mutateAsync({
+        id: data.id,
+        tenant_id: tenantId,
+        name: data.name,
+        farm_name: data.farmName,
+        crop: data.crop,
+      });
+      
+      // Update selected block with new data
+      if (selectedBlock?.id === data.id) {
+        setSelectedBlock(prev => prev ? { ...prev, name: data.name, farm_name: data.farmName, crop: data.crop } : null);
+      }
+      
+      setEditBlockDialogOpen(false);
+      toast({ title: 'Cuartel actualizado', description: `${data.name} ha sido modificado` });
+    } catch (error) {
+      console.error('Failed to update block:', error);
+      toast({ title: 'Error', description: 'No se pudo actualizar el cuartel', variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteBlock = async () => {
+    if (!tenantId || !selectedBlock) return;
+
+    try {
+      await deleteBlock.mutateAsync({
+        id: selectedBlock.id,
+        tenant_id: tenantId,
+      });
+      
+      setDeleteBlockDialogOpen(false);
+      setSelectedBlock(null);
+      setSelectedVisit(null);
+      toast({ title: 'Cuartel eliminado', description: `${selectedBlock.name} ha sido eliminado` });
+    } catch (error) {
+      console.error('Failed to delete block:', error);
+      toast({ title: 'Error', description: 'No se pudo eliminar el cuartel', variant: 'destructive' });
+    }
+  };
+
   const handleToggleSimulator = () => {
     const newState = !isSimulatorRunning;
     setIsSimulatorRunning(newState);
@@ -344,6 +394,8 @@ export default function Dashboard() {
               coverageStats={coverageStats}
               onToggleMissedAreas={handleToggleMissedAreas}
               showMissedAreas={showMissedAreas}
+              onEditBlock={() => setEditBlockDialogOpen(true)}
+              onDeleteBlock={() => setDeleteBlockDialogOpen(true)}
             />
           ) : (
             <BlockList
@@ -406,6 +458,22 @@ export default function Dashboard() {
         onOpenChange={setCreateBlockDialogOpen}
         geometry={drawnGeometry}
         onSave={handleSaveDrawnBlock}
+      />
+
+      <EditBlockDialog
+        open={editBlockDialogOpen}
+        onOpenChange={setEditBlockDialogOpen}
+        block={selectedBlock}
+        onSave={handleEditBlock}
+        isLoading={updateBlock.isPending}
+      />
+
+      <DeleteBlockDialog
+        open={deleteBlockDialogOpen}
+        onOpenChange={setDeleteBlockDialogOpen}
+        block={selectedBlock}
+        onConfirm={handleDeleteBlock}
+        isLoading={deleteBlock.isPending}
       />
     </div>
   );

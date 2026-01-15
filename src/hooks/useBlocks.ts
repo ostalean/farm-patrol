@@ -158,3 +158,61 @@ export function useCreateBlocksBatch() {
     },
   });
 }
+
+interface UpdateBlockInput {
+  id: string;
+  tenant_id: string;
+  name?: string;
+  farm_name?: string | null;
+  crop?: string | null;
+}
+
+export function useUpdateBlock() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateBlockInput) => {
+      const { id, tenant_id, ...updates } = input;
+      
+      const { data: block, error } = await supabase
+        .from('blocks')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+
+      return {
+        ...block,
+        geometry_geojson: block.geometry_geojson as unknown as Feature<Polygon>,
+      } as Block;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['blocks', variables.tenant_id] });
+    },
+  });
+}
+
+export function useDeleteBlock() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, tenant_id }: { id: string; tenant_id: string }) => {
+      // First delete related block_metrics
+      await supabase.from('block_metrics').delete().eq('block_id', id);
+      
+      // Then delete the block
+      const { error } = await supabase
+        .from('blocks')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['blocks', variables.tenant_id] });
+      queryClient.invalidateQueries({ queryKey: ['block_metrics', variables.tenant_id] });
+    },
+  });
+}
