@@ -214,13 +214,27 @@ export default function Dashboard() {
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
       />
       
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Sidebar */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Mobile backdrop when sidebar is open */}
+        {sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black/30 z-40 md:hidden" 
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* Sidebar - static on desktop (takes space), fixed overlay on mobile */}
         <aside className={cn(
-          'w-80 border-r border-border bg-card flex-shrink-0 transition-all duration-300 overflow-hidden',
-          'fixed left-0 top-16 bottom-0 md:relative md:top-0 md:left-auto md:bottom-auto',
-          'z-[100]',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full md:w-0 md:translate-x-0'
+          'bg-card border-r border-border overflow-y-auto transition-all duration-300 flex-shrink-0',
+          // Mobile: fixed drawer overlay
+          'fixed left-0 top-16 bottom-0 w-80 z-50',
+          // Desktop: static flex child that takes its width
+          'md:static md:top-auto md:bottom-auto md:left-auto md:z-auto',
+          // Open/close states
+          sidebarOpen 
+            ? 'translate-x-0 md:w-80' 
+            : '-translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden'
         )}>
           {selectedBlock ? (
             <BlockDetail
@@ -245,8 +259,8 @@ export default function Dashboard() {
           )}
         </aside>
 
-        {/* Map */}
-        <main className="flex-1 relative overflow-hidden isolate z-0 map-shell">
+        {/* Map - takes remaining space after sidebar */}
+        <main className="flex-1 relative overflow-hidden map-shell">
           <FarmMap
             blocks={blocks}
             blockMetrics={blockMetrics}
