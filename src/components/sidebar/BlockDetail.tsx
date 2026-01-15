@@ -35,21 +35,20 @@ interface BlockDetailProps {
   onDeleteBlock?: () => void;
 }
 
-function StatusBadge({ status }: { status: BlockStatus }) {
-  const config = {
-    healthy: { label: 'Al día', className: 'bg-success/10 text-success border-success/30' },
-    warning: { label: 'Atención', className: 'bg-warning/10 text-warning border-warning/30' },
-    critical: { label: 'Crítico', className: 'bg-destructive/10 text-destructive border-destructive/30' },
-  };
-
-  const { label, className } = config[status];
+function StatusBadge({ hasTriggeredAlert }: { hasTriggeredAlert: boolean }) {
+  if (hasTriggeredAlert) {
+    return (
+      <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
+        <AlertTriangle className="w-3 h-3 mr-1" />
+        Atrasado
+      </Badge>
+    );
+  }
 
   return (
-    <Badge variant="outline" className={className}>
-      {status === 'healthy' && <CheckCircle className="w-3 h-3 mr-1" />}
-      {status === 'warning' && <Clock className="w-3 h-3 mr-1" />}
-      {status === 'critical' && <AlertTriangle className="w-3 h-3 mr-1" />}
-      {label}
+    <Badge variant="outline" className="bg-success/10 text-success border-success/30">
+      <CheckCircle className="w-3 h-3 mr-1" />
+      Al día
     </Badge>
   );
 }
@@ -228,7 +227,10 @@ export function BlockDetail({
   onEditBlock,
   onDeleteBlock,
 }: BlockDetailProps) {
-  const status = getBlockStatus(metrics);
+  // Calculate if any alert is triggered
+  const hasTriggeredAlert = alerts.some(alert => 
+    getAlertEffectiveStatus(alert, metrics?.last_seen_at ?? null) === 'triggered'
+  );
   const tractorMap = new Map(tractors.map((t) => [t.id, t]));
   const visitStats = useBlockVisitStats(visits);
   const { exportToPDF, exportToCSV } = useReportExport();
@@ -326,7 +328,7 @@ export function BlockDetail({
         </div>
         
         <div className="mt-3 flex items-center gap-2">
-          <StatusBadge status={status} />
+          <StatusBadge hasTriggeredAlert={hasTriggeredAlert} />
           {(block.metadata as any)?.hectares && (
             <Badge variant="secondary">
               {(block.metadata as any).hectares} ha
@@ -346,9 +348,8 @@ export function BlockDetail({
               </div>
               <div className={cn(
                 'mt-1 text-xl font-display font-semibold',
-                status === 'healthy' && 'text-success',
-                status === 'warning' && 'text-warning',
-                status === 'critical' && 'text-destructive'
+                !hasTriggeredAlert && 'text-success',
+                hasTriggeredAlert && 'text-destructive'
               )}>
                 {hoursSinceLastVisit !== null ? (
                   hoursSinceLastVisit < 24 ? `${hoursSinceLastVisit}h` : `${Math.round(hoursSinceLastVisit / 24)}d`
