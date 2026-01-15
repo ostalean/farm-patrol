@@ -19,6 +19,7 @@ export type Database = {
           block_id: string
           created_at: string
           id: string
+          is_recurring: boolean
           last_triggered_at: string | null
           rule_hours: number
           status: Database["public"]["Enums"]["alert_status"]
@@ -29,6 +30,7 @@ export type Database = {
           block_id: string
           created_at?: string
           id?: string
+          is_recurring?: boolean
           last_triggered_at?: string | null
           rule_hours?: number
           status?: Database["public"]["Enums"]["alert_status"]
@@ -39,6 +41,7 @@ export type Database = {
           block_id?: string
           created_at?: string
           id?: string
+          is_recurring?: boolean
           last_triggered_at?: string | null
           rule_hours?: number
           status?: Database["public"]["Enums"]["alert_status"]

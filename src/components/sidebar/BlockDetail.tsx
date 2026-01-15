@@ -88,14 +88,17 @@ function ActivityHeatmap({ dailyData }: { dailyData: Array<{ date: string; count
   );
 }
 
-// Visit timeline item
+// Visit timeline item with optional coverage stats
 function VisitTimelineItem({ 
   visit, 
   tractor, 
   isSelected, 
   onClick,
   isFirst,
-  isLast 
+  isLast,
+  coverageStats,
+  onToggleMissedAreas,
+  showMissedAreas,
 }: { 
   visit: BlockVisit; 
   tractor: TractorType | undefined;
@@ -103,6 +106,9 @@ function VisitTimelineItem({
   onClick: () => void;
   isFirst: boolean;
   isLast: boolean;
+  coverageStats?: VisitCoverageStats | null;
+  onToggleMissedAreas?: () => void;
+  showMissedAreas?: boolean;
 }) {
   const duration = visit.ended_at 
     ? (new Date(visit.ended_at).getTime() - new Date(visit.started_at).getTime()) / (1000 * 60)
@@ -163,7 +169,65 @@ function VisitTimelineItem({
           <span>•</span>
           <span>{visit.ping_count} pings</span>
         </div>
-        {isSelected && (
+        
+        {/* Coverage analysis - shown when selected */}
+        {isSelected && coverageStats && (
+          <div 
+            className="mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="font-medium text-xs flex items-center gap-2 mb-2 text-primary">
+              <Target className="w-3.5 h-3.5" />
+              Análisis de cobertura
+            </h4>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <div className="text-muted-foreground">Vel. promedio</div>
+                <div className="font-semibold">{coverageStats.averageSpeed.toFixed(1)} km/h</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Vel. máxima</div>
+                <div className="font-semibold">{coverageStats.maxSpeed.toFixed(1)} km/h</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Cobertura</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold">{coverageStats.coveragePercentage.toFixed(0)}%</span>
+                  <Badge 
+                    variant="outline" 
+                    className={cn(
+                      'text-[10px] px-1.5 py-0',
+                      coverageStats.coveragePercentage >= 90 && 'bg-success/10 text-success border-success/30',
+                      coverageStats.coveragePercentage >= 70 && coverageStats.coveragePercentage < 90 && 'bg-warning/10 text-warning border-warning/30',
+                      coverageStats.coveragePercentage < 70 && 'bg-destructive/10 text-destructive border-destructive/30'
+                    )}
+                  >
+                    {coverageStats.coveragePercentage >= 90 ? 'Buena' : coverageStats.coveragePercentage >= 70 ? 'Regular' : 'Baja'}
+                  </Badge>
+                </div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Distancia</div>
+                <div className="font-semibold">{(coverageStats.totalDistance / 1000).toFixed(2)} km</div>
+              </div>
+            </div>
+            {coverageStats.missedAreas.length > 0 && onToggleMissedAreas && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full mt-2 h-7 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleMissedAreas();
+                }}
+              >
+                {showMissedAreas ? 'Ocultar áreas sin cubrir' : 'Ver áreas sin cubrir'}
+              </Button>
+            )}
+          </div>
+        )}
+        
+        {isSelected && !coverageStats && (
           <div className="mt-2 flex items-center gap-1 text-xs text-primary">
             <Route className="w-3 h-3" />
             <span>Ver recorrido en mapa</span>
@@ -374,56 +438,6 @@ export function BlockDetail({
             />
           </div>
 
-          {/* Coverage analysis (only when visit is selected) */}
-          {coverageStats && (
-            <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
-              <h4 className="font-medium text-sm flex items-center gap-2 mb-3">
-                <Target className="w-4 h-4 text-primary" />
-                Análisis de cobertura
-              </h4>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <div className="text-muted-foreground text-xs">Velocidad promedio</div>
-                  <div className="font-semibold">{coverageStats.averageSpeed.toFixed(1)} km/h</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Velocidad máxima</div>
-                  <div className="font-semibold">{coverageStats.maxSpeed.toFixed(1)} km/h</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Cobertura</div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">{coverageStats.coveragePercentage.toFixed(0)}%</span>
-                    <Badge 
-                      variant="outline" 
-                      className={cn(
-                        coverageStats.coveragePercentage >= 90 && 'bg-success/10 text-success border-success/30',
-                        coverageStats.coveragePercentage >= 70 && coverageStats.coveragePercentage < 90 && 'bg-warning/10 text-warning border-warning/30',
-                        coverageStats.coveragePercentage < 70 && 'bg-destructive/10 text-destructive border-destructive/30'
-                      )}
-                    >
-                      {coverageStats.coveragePercentage >= 90 ? 'Buena' : coverageStats.coveragePercentage >= 70 ? 'Regular' : 'Baja'}
-                    </Badge>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Distancia recorrida</div>
-                  <div className="font-semibold">{(coverageStats.totalDistance / 1000).toFixed(2)} km</div>
-                </div>
-              </div>
-              {coverageStats.missedAreas.length > 0 && onToggleMissedAreas && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full mt-3"
-                  onClick={onToggleMissedAreas}
-                >
-                  {showMissedAreas ? 'Ocultar áreas sin cubrir' : 'Ver áreas sin cubrir'}
-                </Button>
-              )}
-            </div>
-          )}
-
           <Separator />
 
           {/* Weekly bar chart - 3 months */}
@@ -511,39 +525,45 @@ export function BlockDetail({
             
             {alerts.length > 0 ? (
               <div className="space-y-2">
-                {alerts.map((alert) => (
-                  <div
-                    key={alert.id}
-                    className={cn(
-                      'p-3 rounded-lg border flex items-center justify-between',
-                      alert.status === 'triggered' && 'bg-destructive/5 border-destructive/30',
-                      alert.status === 'active' && 'bg-muted/50 border-border',
-                      alert.status === 'resolved' && 'bg-success/5 border-success/30 opacity-60'
-                    )}
-                  >
-                    <div>
-                      <div className="font-medium text-sm">
-                        Sin pasada por {alert.rule_hours}h
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {alert.status === 'triggered' && 'Alerta activa'}
-                        {alert.status === 'active' && 'Monitoreando'}
-                        {alert.status === 'resolved' && 'Resuelta'}
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onToggleAlert(alert.id)}
-                    >
-                      {alert.status === 'active' ? (
-                        <BellOff className="w-4 h-4" />
-                      ) : (
-                        <Bell className="w-4 h-4" />
+                {alerts.map((alert) => {
+                  const alertDays = Math.round(alert.rule_hours / 24);
+                  return (
+                    <div
+                      key={alert.id}
+                      className={cn(
+                        'p-3 rounded-lg border flex items-center justify-between',
+                        alert.status === 'triggered' && 'bg-destructive/5 border-destructive/30',
+                        alert.status === 'active' && 'bg-muted/50 border-border',
+                        alert.status === 'resolved' && 'bg-success/5 border-success/30 opacity-60'
                       )}
-                    </Button>
-                  </div>
-                ))}
+                    >
+                      <div>
+                        <div className="font-medium text-sm flex items-center gap-2">
+                          Sin pasada por {alertDays} {alertDays === 1 ? 'día' : 'días'}
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            {alert.is_recurring ? 'Recurrente' : 'Una vez'}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {alert.status === 'triggered' && 'Alerta activa'}
+                          {alert.status === 'active' && 'Monitoreando'}
+                          {alert.status === 'resolved' && 'Resuelta'}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onToggleAlert(alert.id)}
+                      >
+                        {alert.status === 'active' ? (
+                          <BellOff className="w-4 h-4" />
+                        ) : (
+                          <Bell className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-4 text-muted-foreground text-sm">
@@ -587,6 +607,9 @@ export function BlockDetail({
                             onClick={() => onVisitSelect?.(visit)}
                             isFirst={idx === 0}
                             isLast={idx === dayVisits.length - 1}
+                            coverageStats={selectedVisitId === visit.id ? coverageStats : undefined}
+                            onToggleMissedAreas={selectedVisitId === visit.id ? onToggleMissedAreas : undefined}
+                            showMissedAreas={selectedVisitId === visit.id ? showMissedAreas : undefined}
                           />
                         ))}
                       </div>

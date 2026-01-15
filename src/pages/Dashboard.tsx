@@ -174,19 +174,21 @@ export default function Dashboard() {
     setShowMissedAreas(prev => !prev);
   }, []);
 
-  const handleCreateAlert = (blockId: string, ruleHours: number) => {
+  const handleCreateAlert = (blockId: string, ruleHours: number, isRecurring: boolean = true) => {
     const newAlert: Alert = {
       id: `alert-${Date.now()}`,
       tenant_id: 'demo-tenant',
       block_id: blockId,
       rule_hours: ruleHours,
+      is_recurring: isRecurring,
       status: 'active',
       last_triggered_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     setAlerts(prev => [...prev, newAlert]);
-    toast({ title: 'Alerta creada', description: `Se notificará si no hay pasada en ${ruleHours}h` });
+    const alertDays = Math.round(ruleHours / 24);
+    toast({ title: 'Alerta creada', description: `Se notificará si no hay pasada en ${alertDays} ${alertDays === 1 ? 'día' : 'días'}` });
   };
 
   const handleUploadGeoJSON = async (features: Feature<Polygon>[]) => {
