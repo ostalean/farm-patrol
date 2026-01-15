@@ -10,16 +10,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
-import type { Alert } from '@/types/farm';
+import type { Alert, Block } from '@/types/farm';
 
 interface AppHeaderProps {
   triggeredAlerts: Alert[];
+  blocks: Block[];
   onToggleSidebar: () => void;
   onCreateBulkAlerts?: () => void;
   onManageAlerts?: () => void;
+  onBlockClick?: (block: Block) => void;
 }
 
-export function AppHeader({ triggeredAlerts, onToggleSidebar, onCreateBulkAlerts, onManageAlerts }: AppHeaderProps) {
+export function AppHeader({ triggeredAlerts, blocks, onToggleSidebar, onCreateBulkAlerts, onManageAlerts, onBlockClick }: AppHeaderProps) {
   const { user, signOut } = useAuth();
 
   return (
@@ -87,16 +89,30 @@ export function AppHeader({ triggeredAlerts, onToggleSidebar, onCreateBulkAlerts
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             {triggeredAlerts.length > 0 ? (
-              triggeredAlerts.map((alert) => (
-                <DropdownMenuItem key={alert.id} className="py-3">
-                  <div>
-                    <p className="font-medium text-sm">Sin pasada por {alert.rule_hours}h</p>
-                    <p className="text-xs text-muted-foreground">
-                      Cuartel requiere atención
-                    </p>
-                  </div>
-                </DropdownMenuItem>
-              ))
+              triggeredAlerts.map((alert) => {
+                const block = blocks.find(b => b.id === alert.block_id);
+                const alertDays = Math.floor(alert.rule_hours / 24);
+                const alertTimeText = alertDays >= 1 
+                  ? `${alertDays} ${alertDays === 1 ? 'día' : 'días'}` 
+                  : `${alert.rule_hours}h`;
+                return (
+                  <DropdownMenuItem 
+                    key={alert.id} 
+                    className="py-3 cursor-pointer"
+                    onClick={() => block && onBlockClick?.(block)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-destructive animate-pulse shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">{block?.name || 'Cuartel desconocido'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Sin pasada por más de {alertTimeText}
+                        </p>
+                      </div>
+                    </div>
+                  </DropdownMenuItem>
+                );
+              })
             ) : (
               <div className="p-4 text-center text-muted-foreground text-sm">
                 No hay alertas activas
