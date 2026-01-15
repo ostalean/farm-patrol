@@ -177,21 +177,25 @@ export default function Dashboard() {
     setShowMissedAreas(prev => !prev);
   }, []);
 
-  const handleCreateAlert = (blockId: string, ruleHours: number, isRecurring: boolean = true) => {
-    const newAlert: Alert = {
-      id: `alert-${Date.now()}`,
+  const handleCreateAlerts = (blockIds: string[], ruleHours: number, isRecurring: boolean = true) => {
+    const newAlerts: Alert[] = blockIds.map((blockId, index) => ({
+      id: `alert-${Date.now()}-${index}`,
       tenant_id: 'demo-tenant',
       block_id: blockId,
       rule_hours: ruleHours,
       is_recurring: isRecurring,
-      status: 'active',
+      status: 'active' as const,
       last_triggered_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    };
-    setAlerts(prev => [...prev, newAlert]);
+    }));
+    setAlerts(prev => [...prev, ...newAlerts]);
     const alertDays = Math.round(ruleHours / 24);
-    toast({ title: 'Alerta creada', description: `Se notificará si no hay pasada en ${alertDays} ${alertDays === 1 ? 'día' : 'días'}` });
+    if (blockIds.length === 1) {
+      toast({ title: 'Alerta creada', description: `Se notificará si no hay pasada en ${alertDays} ${alertDays === 1 ? 'día' : 'días'}` });
+    } else {
+      toast({ title: `${blockIds.length} alertas creadas`, description: `Se notificará si no hay pasada en ${alertDays} ${alertDays === 1 ? 'día' : 'días'}` });
+    }
   };
 
   const handleDeleteAlertClick = (alert: Alert) => {
@@ -459,7 +463,8 @@ export default function Dashboard() {
         open={alertDialogOpen}
         onOpenChange={setAlertDialogOpen}
         block={selectedBlock}
-        onSave={handleCreateAlert}
+        blocks={blocks}
+        onSave={handleCreateAlerts}
       />
       
       <UploadGeoJSONDialog
