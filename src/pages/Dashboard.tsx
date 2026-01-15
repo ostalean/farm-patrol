@@ -435,7 +435,7 @@ export default function Dashboard() {
 
         {/* Sidebar - static on desktop (takes space), fixed overlay on mobile */}
         <aside className={cn(
-          'bg-card border-r border-border overflow-y-auto transition-all duration-300 flex-shrink-0',
+          'bg-card border-r border-border overflow-y-auto overflow-x-hidden transition-all duration-300 flex-shrink-0',
           // Mobile: fixed drawer overlay
           'fixed left-0 top-16 bottom-0 w-80 z-50',
           // Desktop: static flex child that takes its width (wider for better content fit)

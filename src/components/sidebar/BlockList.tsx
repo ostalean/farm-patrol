@@ -168,7 +168,7 @@ export function BlockList({
                 key={block.id}
                 onClick={() => onBlockSelect(block)}
                 className={cn(
-                  'w-full text-left p-3 rounded-lg transition-all',
+                  'w-full text-left p-3 rounded-lg transition-all overflow-hidden',
                   'hover:bg-muted/80',
                   isSelected && 'bg-primary/10 border border-primary/30',
                   !isSelected && 'border border-transparent'
