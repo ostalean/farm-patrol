@@ -1,4 +1,4 @@
-import { Leaf, Tractor, LogOut, Menu, Bell, AlertTriangle } from 'lucide-react';
+import { Leaf, Tractor, LogOut, Menu, Bell, BellPlus, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -15,9 +15,10 @@ import type { Alert } from '@/types/farm';
 interface AppHeaderProps {
   triggeredAlerts: Alert[];
   onToggleSidebar: () => void;
+  onCreateBulkAlerts?: () => void;
 }
 
-export function AppHeader({ triggeredAlerts, onToggleSidebar }: AppHeaderProps) {
+export function AppHeader({ triggeredAlerts, onToggleSidebar, onCreateBulkAlerts }: AppHeaderProps) {
   const { user, signOut } = useAuth();
 
   return (
@@ -42,6 +43,18 @@ export function AppHeader({ triggeredAlerts, onToggleSidebar }: AppHeaderProps) 
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Create bulk alerts button */}
+        {onCreateBulkAlerts && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={onCreateBulkAlerts}
+            title="Crear alertas masivas"
+          >
+            <BellPlus className="w-5 h-5" />
+          </Button>
+        )}
+
         {/* Alerts indicator */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
