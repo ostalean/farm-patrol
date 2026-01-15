@@ -203,6 +203,21 @@ export default function Dashboard() {
     mapRef.current?.zoomOut();
   }, []);
 
+  // Force Mapbox to resize when sidebar opens/closes
+  useEffect(() => {
+    const resizeMap = () => {
+      requestAnimationFrame(() => {
+        mapRef.current?.resize();
+      });
+    };
+    
+    // Resize immediately and after transition completes
+    resizeMap();
+    const timeoutId = setTimeout(resizeMap, 350);
+    
+    return () => clearTimeout(timeoutId);
+  }, [sidebarOpen]);
+
   const triggeredAlerts = alerts.filter(a => a.status === 'triggered');
   const blockAlerts = selectedBlock ? alerts.filter(a => a.block_id === selectedBlock.id) : [];
   const blockVisits = selectedBlock ? visits.filter(v => v.block_id === selectedBlock.id) : [];
@@ -229,11 +244,11 @@ export default function Dashboard() {
           'bg-card border-r border-border overflow-y-auto transition-all duration-300 flex-shrink-0',
           // Mobile: fixed drawer overlay
           'fixed left-0 top-16 bottom-0 w-80 z-50',
-          // Desktop: static flex child that takes its width
+          // Desktop: static flex child that takes its width (wider for better content fit)
           'md:static md:top-auto md:bottom-auto md:left-auto md:z-auto',
           // Open/close states
           sidebarOpen 
-            ? 'translate-x-0 md:w-80' 
+            ? 'translate-x-0 md:w-96' 
             : '-translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden'
         )}>
           {selectedBlock ? (

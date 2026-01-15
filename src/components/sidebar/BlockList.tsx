@@ -17,14 +17,14 @@ interface BlockListProps {
   onConfigureAlert: (block: Block) => void;
 }
 
-function StatusIcon({ status }: { status: BlockStatus }) {
+function StatusIcon({ status, className }: { status: BlockStatus; className?: string }) {
   switch (status) {
     case 'healthy':
-      return <CheckCircle className="w-4 h-4 text-success" />;
+      return <CheckCircle className={cn("w-4 h-4 text-success", className)} />;
     case 'warning':
-      return <Clock className="w-4 h-4 text-warning" />;
+      return <Clock className={cn("w-4 h-4 text-warning", className)} />;
     case 'critical':
-      return <AlertTriangle className="w-4 h-4 text-destructive" />;
+      return <AlertTriangle className={cn("w-4 h-4 text-destructive", className)} />;
   }
 }
 
@@ -139,32 +139,32 @@ export function BlockList({
                   !isSelected && 'border border-transparent'
                 )}
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start justify-between gap-2 min-w-0">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <StatusIcon status={status} />
-                      <span className="font-medium truncate">{block.name}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <StatusIcon status={status} className="shrink-0" />
+                      <span className="font-medium truncate flex-1 min-w-0">{block.name}</span>
                       {hasTriggeredAlert && (
-                        <Bell className="w-3 h-3 text-destructive animate-pulse" />
+                        <Bell className="w-3 h-3 text-destructive animate-pulse shrink-0" />
                       )}
                     </div>
                     
-                    <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground min-w-0">
                       {block.farm_name && (
                         <span className="truncate">{block.farm_name}</span>
                       )}
                       {block.crop && (
                         <>
-                          <span>•</span>
+                          <span className="shrink-0">•</span>
                           <span className="truncate">{block.crop}</span>
                         </>
                       )}
                     </div>
                   </div>
                   
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 w-24">
                     <div className={cn(
-                      'text-sm font-medium',
+                      'text-sm font-medium whitespace-nowrap',
                       status === 'healthy' && 'text-success',
                       status === 'warning' && 'text-warning',
                       status === 'critical' && 'text-destructive'
@@ -172,7 +172,7 @@ export function BlockList({
                       {formatTimeSince(metrics?.last_seen_at ?? null)}
                     </div>
                     {metrics && (
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-muted-foreground whitespace-nowrap">
                         {metrics.passes_24h} pasadas hoy
                       </div>
                     )}
