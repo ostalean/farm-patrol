@@ -217,8 +217,8 @@ export default function Dashboard() {
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
         <aside className={cn(
-          'w-80 border-r border-border bg-card shrink-0 transition-all duration-300',
-          'absolute md:relative inset-y-16 md:inset-y-0 z-20',
+          'w-80 border-r border-border bg-card flex-shrink-0 transition-all duration-300 overflow-hidden',
+          'absolute md:relative inset-y-16 md:inset-y-0 z-30',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full md:w-0 md:translate-x-0'
         )}>
           {selectedBlock ? (
@@ -245,7 +245,7 @@ export default function Dashboard() {
         </aside>
 
         {/* Map */}
-        <main className="flex-1 relative">
+        <main className="flex-1 relative overflow-hidden">
           <FarmMap
             blocks={blocks}
             blockMetrics={blockMetrics}
