@@ -70,6 +70,7 @@ export interface Alert {
   tenant_id: string;
   block_id: string;
   rule_hours: number;
+  is_recurring: boolean;
   status: AlertStatus;
   last_triggered_at: string | null;
   created_at: string;
