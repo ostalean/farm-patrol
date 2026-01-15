@@ -54,40 +54,6 @@ function StatusBadge({ status }: { status: BlockStatus }) {
   );
 }
 
-// Activity heatmap for last 30 days
-function ActivityHeatmap({ dailyData }: { dailyData: Array<{ date: string; count: number }> }) {
-  const getIntensity = (count: number) => {
-    if (count === 0) return 'bg-muted';
-    if (count === 1) return 'bg-success/30';
-    if (count <= 3) return 'bg-success/50';
-    return 'bg-success/80';
-  };
-
-  // Split into weeks (7 days per row)
-  const weeks: typeof dailyData[] = [];
-  for (let i = 0; i < dailyData.length; i += 7) {
-    weeks.push(dailyData.slice(i, i + 7));
-  }
-
-  return (
-    <div className="space-y-1">
-      {weeks.map((week, weekIdx) => (
-        <div key={weekIdx} className="flex gap-1">
-          {week.map((day) => (
-            <div
-              key={day.date}
-              className={cn(
-                'w-3 h-3 rounded-sm cursor-default',
-                getIntensity(day.count)
-              )}
-              title={`${day.date}: ${day.count} pasadas`}
-            />
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // Visit timeline item with optional coverage stats
 function VisitTimelineItem({ 
@@ -495,26 +461,6 @@ export function BlockDetail({
             </div>
           </div>
 
-          {/* Activity heatmap - 90 days */}
-          <div>
-            <h3 className="font-medium text-sm flex items-center gap-2 mb-3">
-              <TrendingUp className="w-4 h-4" />
-              Actividad últimos 90 días
-            </h3>
-            <ActivityHeatmap dailyData={visitStats.dailyPasses90d} />
-            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-              <span>Menos</span>
-              <div className="flex gap-0.5">
-                <div className="w-3 h-3 rounded-sm bg-muted" />
-                <div className="w-3 h-3 rounded-sm bg-success/30" />
-                <div className="w-3 h-3 rounded-sm bg-success/50" />
-                <div className="w-3 h-3 rounded-sm bg-success/80" />
-              </div>
-              <span>Más</span>
-            </div>
-          </div>
-
-          <Separator />
 
           {/* Alerts section */}
           <div>
