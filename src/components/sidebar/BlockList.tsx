@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, Alert } from '@/types/farm';
-import { getBlockStatus, formatTimeSince, type BlockStatus } from '@/types/farm';
+import { getBlockStatus, formatTimeSince, formatTimeSinceCompact, type BlockStatus } from '@/types/farm';
 
 interface BlockListProps {
   blocks: Block[];
@@ -162,18 +162,21 @@ export function BlockList({
                     </div>
                   </div>
                   
-                  <div className="text-right shrink-0 w-24">
+                  <div 
+                    className="text-right shrink-0 w-16"
+                    title={formatTimeSince(metrics?.last_seen_at ?? null)}
+                  >
                     <div className={cn(
                       'text-sm font-medium whitespace-nowrap',
                       status === 'healthy' && 'text-success',
                       status === 'warning' && 'text-warning',
                       status === 'critical' && 'text-destructive'
                     )}>
-                      {formatTimeSince(metrics?.last_seen_at ?? null)}
+                      {formatTimeSinceCompact(metrics?.last_seen_at ?? null)}
                     </div>
                     {metrics && (
                       <div className="text-xs text-muted-foreground whitespace-nowrap">
-                        {metrics.passes_24h} pasadas hoy
+                        {metrics.passes_24h} hoy
                       </div>
                     )}
                   </div>

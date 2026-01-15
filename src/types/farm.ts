@@ -110,3 +110,13 @@ export function formatTimeSince(date: string | null): string {
   if (hours < 48) return 'Hace 1 día';
   return `Hace ${Math.round(hours / 24)} días`;
 }
+
+export function formatTimeSinceCompact(date: string | null): string {
+  if (!date) return '—';
+  
+  const hours = (Date.now() - new Date(date).getTime()) / (1000 * 60 * 60);
+  
+  if (hours < 1) return `${Math.round(hours * 60)}m`;
+  if (hours < 24) return `${Math.round(hours)}h`;
+  return `${Math.round(hours / 24)}d`;
+}
