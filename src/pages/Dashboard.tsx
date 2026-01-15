@@ -391,7 +391,11 @@ export default function Dashboard() {
     <div className="h-screen flex flex-col bg-background">
       <AppHeader 
         triggeredAlerts={triggeredAlerts} 
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        onCreateBulkAlerts={() => {
+          setSelectedBlock(null);
+          setAlertDialogOpen(true);
+        }}
       />
       
       <div className="flex-1 flex overflow-hidden">

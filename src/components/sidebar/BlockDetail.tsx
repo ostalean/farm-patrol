@@ -208,6 +208,10 @@ function VisitTimelineItem({
                 </div>
               </div>
               <div>
+                <div className="text-muted-foreground">Área cubierta</div>
+                <div className="font-semibold">{coverageStats.coveredArea.toFixed(2)} ha</div>
+              </div>
+              <div>
                 <div className="text-muted-foreground">Distancia</div>
                 <div className="font-semibold">{(coverageStats.totalDistance / 1000).toFixed(2)} km</div>
               </div>
