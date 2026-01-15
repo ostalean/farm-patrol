@@ -103,6 +103,26 @@ export interface VisitCoverageStats {
 // Helper type for block status calculation
 export type BlockStatus = 'healthy' | 'warning' | 'critical';
 
+// Calculate effective alert status based on last_seen_at
+export function getAlertEffectiveStatus(
+  alert: Alert, 
+  lastSeenAt: string | null
+): AlertStatus {
+  // If already resolved, keep that status
+  if (alert.status === 'resolved') return 'resolved';
+  
+  // If no visits, it's triggered
+  if (!lastSeenAt) return 'triggered';
+  
+  const hoursSinceLastVisit = 
+    (Date.now() - new Date(lastSeenAt).getTime()) / (1000 * 60 * 60);
+  
+  // If exceeds configured hours, it's triggered
+  if (hoursSinceLastVisit > alert.rule_hours) return 'triggered';
+  
+  return 'active';
+}
+
 export function getBlockStatus(metrics: BlockMetrics | null, alertHours = 48): BlockStatus {
   if (!metrics?.last_seen_at) return 'critical';
   
