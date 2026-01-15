@@ -22,6 +22,7 @@ import { useTenant } from '@/hooks/useTenant';
 import { useAlerts, useCreateAlertsBatch, useDeleteAlert, useDeleteAlertsBatch } from '@/hooks/useAlerts';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, Tractor, Alert, BlockVisit, VisitCoverageStats } from '@/types/farm';
+import { getAlertEffectiveStatus } from '@/types/farm';
 import { demoTractors, DEMO_MAP_CENTER, DEMO_MAP_ZOOM } from '@/lib/demoData';
 import type { Feature, Polygon } from 'geojson';
 import { Loader2 } from 'lucide-react';
@@ -385,7 +386,10 @@ export default function Dashboard() {
     return () => clearTimeout(timeoutId);
   }, [sidebarOpen]);
 
-  const triggeredAlerts = alerts.filter(a => a.status === 'triggered');
+  const triggeredAlerts = alerts.filter(alert => {
+    const metrics = blockMetrics[alert.block_id];
+    return getAlertEffectiveStatus(alert, metrics?.last_seen_at ?? null) === 'triggered';
+  });
   const blockAlerts = selectedBlock ? alerts.filter(a => a.block_id === selectedBlock.id) : [];
   const blockVisits = selectedBlock ? visits.filter(v => v.block_id === selectedBlock.id) : [];
 
