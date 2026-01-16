@@ -152,8 +152,8 @@ export function BlockList({
       </div>
 
       {/* Block list */}
-      <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1">
+      <ScrollArea className="flex-1 overflow-x-hidden">
+        <div className="p-2 space-y-1 overflow-x-hidden">
           {sortedBlocks.map((block) => {
             const metrics = blockMetrics[block.id];
             const status = getBlockStatus(metrics);
@@ -174,24 +174,27 @@ export function BlockList({
                   !isSelected && 'border border-transparent'
                 )}
               >
-                <div className="flex items-center gap-2 min-w-0 w-full">
-                  <StatusIcon status={status} className="shrink-0" />
+                {/* CSS Grid: icon | text (flexible) | time (fixed) */}
+                <div className="grid grid-cols-[1rem_minmax(0,1fr)_3.5rem] items-center gap-2 w-full">
+                  {/* Col 1: Status icon */}
+                  <StatusIcon status={status} />
                   
-                  <div className="flex-1 min-w-0 overflow-hidden">
+                  {/* Col 2: Name + farm/crop (flexible, truncates) */}
+                  <div className="min-w-0 overflow-hidden">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="font-medium truncate min-w-0 flex-1">{block.name}</span>
+                      <span className="font-medium truncate">{block.name}</span>
                       {hasTriggeredAlert && (
                         <Bell className="w-3 h-3 text-destructive animate-pulse shrink-0" />
                       )}
                     </div>
-                    
                     <p className="text-sm text-muted-foreground truncate">
                       {block.farm_name}{block.farm_name && block.crop && ' • '}{block.crop}
                     </p>
                   </div>
                   
+                  {/* Col 3: Time column (fixed width, always visible) */}
                   <div 
-                    className="text-right shrink-0 w-14"
+                    className="text-right justify-self-end"
                     title={formatTimeSince(metrics?.last_seen_at ?? null)}
                   >
                     <div className={cn(
@@ -203,7 +206,7 @@ export function BlockList({
                       {formatTimeSinceCompact(metrics?.last_seen_at ?? null)}
                     </div>
                     {metrics && (
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-muted-foreground whitespace-nowrap">
                         {metrics.passes_24h} hoy
                       </div>
                     )}
