@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, Alert } from '@/types/farm';
-import { getBlockStatus, formatTimeSince, formatTimeSinceCompact, getAlertEffectiveStatus, type BlockStatus } from '@/types/farm';
+import { formatTimeSince, formatTimeSinceCompact, getAlertEffectiveStatus } from '@/types/farm';
 
 interface BlockListProps {
   blocks: Block[];
@@ -18,15 +18,13 @@ interface BlockListProps {
   onConfigureAlert: (block: Block) => void;
 }
 
-function StatusIcon({ status, className }: { status: BlockStatus; className?: string }) {
-  switch (status) {
-    case 'healthy':
-      return <CheckCircle className={cn("w-4 h-4 text-success", className)} />;
-    case 'warning':
-      return <Clock className={cn("w-4 h-4 text-warning", className)} />;
-    case 'critical':
-      return <AlertTriangle className={cn("w-4 h-4 text-destructive", className)} />;
+function StatusIcon({ hasTriggeredAlert, className }: { hasTriggeredAlert: boolean; className?: string }) {
+  // Only show alert icon if the block has a triggered alert
+  if (hasTriggeredAlert) {
+    return <AlertTriangle className={cn("w-4 h-4 text-destructive", className)} />;
   }
+  // Default: show a neutral/healthy icon
+  return <CheckCircle className={cn("w-4 h-4 text-success", className)} />;
 }
 
 function BlockItem({
@@ -42,8 +40,6 @@ function BlockItem({
   isSelected: boolean;
   onSelect: () => void;
 }) {
-  const status = getBlockStatus(metrics);
-
   return (
     <button
       onClick={onSelect}
@@ -56,8 +52,8 @@ function BlockItem({
     >
       {/* CSS Grid: icon | text (flexible) | time (fixed) */}
       <div className="grid grid-cols-[1rem_minmax(0,1fr)_3.5rem] items-center gap-2 w-full">
-        {/* Col 1: Status icon */}
-        <StatusIcon status={status} />
+        {/* Col 1: Status icon - only shows alert if there's a triggered alert */}
+        <StatusIcon hasTriggeredAlert={hasTriggeredAlert} />
         
         {/* Col 2: Name + crop (flexible, truncates) */}
         <div className="min-w-0 overflow-hidden">
@@ -81,9 +77,7 @@ function BlockItem({
         >
           <div className={cn(
             'text-sm font-medium',
-            status === 'healthy' && 'text-success',
-            status === 'warning' && 'text-warning',
-            status === 'critical' && 'text-destructive'
+            hasTriggeredAlert ? 'text-destructive' : 'text-muted-foreground'
           )}>
             {formatTimeSinceCompact(metrics?.last_seen_at ?? null)}
           </div>

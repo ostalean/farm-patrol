@@ -119,7 +119,9 @@ export function AppHeader({ triggeredAlerts, blocks, onToggleSidebar, onCreateBu
                     <div className="flex items-center gap-3">
                       <div className="w-2 h-2 rounded-full bg-destructive animate-pulse shrink-0" />
                       <div className="min-w-0">
-                        <p className="font-medium text-sm truncate">{block?.name || 'Cuartel desconocido'}</p>
+                        <p className="font-medium text-sm truncate">
+                          {block?.farm_name ? `${block.farm_name} - ` : ''}{block?.name || 'Cuartel desconocido'}
+                        </p>
                         <p className="text-xs text-muted-foreground">
                           Sin pasada por más de {alertTimeText}
                         </p>
