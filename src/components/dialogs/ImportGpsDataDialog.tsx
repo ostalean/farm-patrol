@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, Loader2, Tractor } from 'lucide-react';
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, Loader2, Tractor, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
   Dialog,
@@ -28,6 +28,8 @@ import {
 } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { useGpsImport } from '@/hooks/useGpsImport';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -63,6 +65,8 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
   const [step, setStep] = useState<ImportStep>('upload');
   const [fileName, setFileName] = useState<string>('');
   const [rawData, setRawData] = useState<Record<string, any>[]>([]);
+  const [rawPreview, setRawPreview] = useState<any[][]>([]); // Raw rows for header selection
+  const [headerRowIndex, setHeaderRowIndex] = useState<number>(0); // 0-indexed
   const [columns, setColumns] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>({
     timestamp: null,
@@ -75,6 +79,8 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
   const [parsedPings, setParsedPings] = useState<ParsedPing[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [importStats, setImportStats] = useState<any>(null);
+  const [processVisitsAfterImport, setProcessVisitsAfterImport] = useState(true);
+  const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
 
   // Fetch tractors
   const { data: tractors = [] } = useQuery({
@@ -134,6 +140,33 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
     return mapping;
   }, []);
 
+  // Reparse with selected header row
+  const reparseWithHeaderRow = useCallback((wb: XLSX.WorkBook, headerRow: number) => {
+    const sheetName = wb.SheetNames[0];
+    const worksheet = wb.Sheets[sheetName];
+    
+    // Convert to JSON starting from header row
+    const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { 
+      raw: false,
+      dateNF: 'yyyy-mm-dd hh:mm:ss',
+      range: headerRow, // Start from this row (0-indexed)
+    });
+    
+    if (jsonData.length === 0) {
+      setParseErrors(['No hay datos después de la fila de encabezados seleccionada']);
+      return;
+    }
+
+    // Get column names from first data row
+    const cols = Object.keys(jsonData[0]);
+    setColumns(cols);
+    setRawData(jsonData);
+    
+    // Auto-detect column mapping
+    const detected = autoDetectColumns(cols);
+    setColumnMapping(detected);
+  }, [autoDetectColumns]);
+
   // Handle file upload
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -145,31 +178,25 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+        setWorkbook(wb);
         
         // Get first sheet
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
+        const sheetName = wb.SheetNames[0];
+        const worksheet = wb.Sheets[sheetName];
         
-        // Convert to JSON
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { 
+        // Get raw preview (first 10 rows as arrays for header selection)
+        const rawRows = XLSX.utils.sheet_to_json<any[]>(worksheet, { 
+          header: 1, // Return arrays instead of objects
           raw: false,
           dateNF: 'yyyy-mm-dd hh:mm:ss',
         });
         
-        if (jsonData.length === 0) {
-          setParseErrors(['El archivo no contiene datos']);
-          return;
-        }
-
-        // Get column names from first row
-        const cols = Object.keys(jsonData[0]);
-        setColumns(cols);
-        setRawData(jsonData);
+        setRawPreview(rawRows.slice(0, 10));
         
-        // Auto-detect column mapping
-        const detected = autoDetectColumns(cols);
-        setColumnMapping(detected);
+        // Parse with default header row (0)
+        reparseWithHeaderRow(wb, 0);
+        setHeaderRowIndex(0);
         
         setStep('configure');
       } catch (error: any) {
@@ -178,7 +205,16 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
     };
     
     reader.readAsArrayBuffer(file);
-  }, [autoDetectColumns]);
+  }, [reparseWithHeaderRow]);
+
+  // Handle header row change
+  const handleHeaderRowChange = useCallback((value: string) => {
+    const newIndex = parseInt(value, 10);
+    setHeaderRowIndex(newIndex);
+    if (workbook) {
+      reparseWithHeaderRow(workbook, newIndex);
+    }
+  }, [workbook, reparseWithHeaderRow]);
 
   // Parse data with current mapping
   const parseData = useCallback(() => {
@@ -187,7 +223,7 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
 
     for (let i = 0; i < rawData.length; i++) {
       const row = rawData[i];
-      const rowNum = i + 2; // Excel row number (1-indexed + header)
+      const rowNum = i + headerRowIndex + 2; // Excel row number (1-indexed + header row offset)
 
       try {
         // Get timestamp
@@ -247,7 +283,7 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
     setParseErrors(errors.slice(0, 20)); // Limit displayed errors
 
     return pings;
-  }, [rawData, columnMapping]);
+  }, [rawData, columnMapping, headerRowIndex]);
 
   // Preview data
   const previewData = useMemo(() => {
@@ -269,12 +305,25 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
     try {
       const stats = await importPings(selectedTractorId, pings);
       setImportStats(stats);
+      
+      // Process visits if option is enabled
+      if (processVisitsAfterImport && stats.inserted > 0) {
+        try {
+          await supabase.functions.invoke('process-historical-visits', {
+            body: { tractor_id: selectedTractorId },
+          });
+        } catch (err) {
+          console.error('Error processing visits:', err);
+          // Don't fail the import if visit processing fails
+        }
+      }
+      
       setStep('complete');
       onSuccess?.();
     } catch (error) {
       setStep('configure');
     }
-  }, [selectedTractorId, parseData, importPings, onSuccess]);
+  }, [selectedTractorId, parseData, importPings, onSuccess, processVisitsAfterImport]);
 
   // Reset dialog
   const handleClose = useCallback((open: boolean) => {
@@ -282,6 +331,8 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
       setStep('upload');
       setFileName('');
       setRawData([]);
+      setRawPreview([]);
+      setHeaderRowIndex(0);
       setColumns([]);
       setColumnMapping({
         timestamp: null,
@@ -294,6 +345,8 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
       setParsedPings([]);
       setParseErrors([]);
       setImportStats(null);
+      setProcessVisitsAfterImport(true);
+      setWorkbook(null);
       reset();
     }
     onOpenChange(open);
@@ -305,7 +358,7 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5" />
@@ -349,13 +402,60 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
 
           {/* Configure Step */}
           {step === 'configure' && (
-            <ScrollArea className="h-[50vh]">
+            <ScrollArea className="h-[55vh]">
               <div className="space-y-6 pr-4">
                 {/* File info */}
                 <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                   <FileSpreadsheet className="w-5 h-5 text-primary" />
                   <span className="font-medium">{fileName}</span>
                   <Badge variant="secondary">{rawData.length} registros</Badge>
+                </div>
+
+                {/* Header row selection */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium">Selección de fila de encabezados</h4>
+                    <Select value={String(headerRowIndex)} onValueChange={handleHeaderRowChange}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue placeholder="Fila de encabezados" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {rawPreview.slice(0, 5).map((_, i) => (
+                          <SelectItem key={i} value={String(i)}>Fila {i + 1}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Raw preview table */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableBody>
+                        {rawPreview.slice(0, 5).map((row, rowIndex) => (
+                          <TableRow 
+                            key={rowIndex}
+                            className={rowIndex === headerRowIndex ? 'bg-primary/10 font-medium' : ''}
+                          >
+                            <TableCell className="text-xs py-1.5 w-12 text-muted-foreground">
+                              {rowIndex === headerRowIndex && (
+                                <Badge variant="outline" className="text-[10px]">Header</Badge>
+                              )}
+                              {rowIndex !== headerRowIndex && `${rowIndex + 1}`}
+                            </TableCell>
+                            {row.slice(0, 6).map((cell: any, cellIndex: number) => (
+                              <TableCell key={cellIndex} className="text-xs py-1.5 max-w-[120px] truncate">
+                                {String(cell ?? '').substring(0, 25)}
+                              </TableCell>
+                            ))}
+                            {row.length > 6 && <TableCell className="text-xs py-1.5">...</TableCell>}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Haz clic en el selector para elegir qué fila contiene los encabezados de columna.
+                  </p>
                 </div>
 
                 {/* Tractor selection */}
@@ -483,7 +583,7 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
 
                 {/* Preview */}
                 <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Vista previa (primeras 5 filas)</h4>
+                  <h4 className="text-sm font-medium">Vista previa de datos (primeras 5 filas)</h4>
                   <div className="border rounded-lg overflow-hidden">
                     <Table>
                       <TableHeader>
@@ -508,6 +608,24 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
                       </TableBody>
                     </Table>
                   </div>
+                </div>
+
+                {/* Process visits option */}
+                <div className="flex items-center space-x-2 p-3 bg-muted/50 rounded-lg">
+                  <Checkbox 
+                    id="process-visits" 
+                    checked={processVisitsAfterImport}
+                    onCheckedChange={(checked) => setProcessVisitsAfterImport(checked === true)}
+                  />
+                  <Label htmlFor="process-visits" className="text-sm cursor-pointer">
+                    <div className="flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4" />
+                      Procesar visitas a cuarteles automáticamente después de importar
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Detecta automáticamente qué cuarteles fueron visitados basándose en las coordenadas GPS
+                    </p>
+                  </Label>
                 </div>
 
                 {/* Errors */}
@@ -574,6 +692,11 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
                     <p className="text-xs text-muted-foreground">Errores</p>
                   </div>
                 </div>
+                {processVisitsAfterImport && (
+                  <p className="text-sm text-muted-foreground">
+                    Las visitas a cuarteles han sido procesadas automáticamente
+                  </p>
+                )}
               </div>
             </div>
           )}
