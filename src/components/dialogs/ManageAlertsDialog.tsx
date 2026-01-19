@@ -121,10 +121,12 @@ function AlertsContent({
                   checked={allBlockSelected}
                   className={someBlockSelected && !allBlockSelected ? 'opacity-50' : ''}
                 />
-                <span className="font-medium text-sm">
-                  {block?.name || 'Cuartel eliminado'}
-                </span>
-                <Badge variant="secondary" className="text-xs">
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-sm">
+                    {block?.farm_name ? `${block.farm_name} - ` : ''}{block?.name || 'Cuartel eliminado'}
+                  </span>
+                </div>
+                <Badge variant="secondary" className="text-xs shrink-0">
                   {blockAlerts.length} {blockAlerts.length === 1 ? 'alerta' : 'alertas'}
                 </Badge>
               </div>
