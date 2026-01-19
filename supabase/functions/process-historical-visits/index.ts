@@ -52,6 +52,10 @@ function getPolygonCoordinates(geojson: any): number[][] | null {
   }
 }
 
+// Gap threshold for merging visits (in minutes)
+// If a tractor leaves and re-enters within this time, it's considered the same visit
+const MERGE_GAP_MINUTES = 30;
+
 serve(async (req) => {
   // Handle CORS
   if (req.method === "OPTIONS") {
@@ -195,6 +199,13 @@ serve(async (req) => {
       }> = [];
 
       for (const [tractorId, pings] of pingsByTractor) {
+        // Step 1: Detect raw visits (each entry/exit creates one)
+        const rawVisits: Array<{
+          started_at: string;
+          ended_at: string;
+          ping_count: number;
+        }> = [];
+        
         let currentVisit: { started_at: string; pings: GpsPing[] } | null = null;
 
         for (const ping of pings) {
@@ -211,8 +222,7 @@ serve(async (req) => {
           } else if (currentVisit) {
             // End visit
             const lastPing = currentVisit.pings[currentVisit.pings.length - 1];
-            blockVisits.push({
-              tractor_id: tractorId,
+            rawVisits.push({
               started_at: currentVisit.started_at,
               ended_at: lastPing.ts,
               ping_count: currentVisit.pings.length,
@@ -224,11 +234,48 @@ serve(async (req) => {
         // Handle ongoing visit (tractor still in block at end of data)
         if (currentVisit && currentVisit.pings.length > 0) {
           const lastPing = currentVisit.pings[currentVisit.pings.length - 1];
-          blockVisits.push({
-            tractor_id: tractorId,
+          rawVisits.push({
             started_at: currentVisit.started_at,
             ended_at: lastPing.ts,
             ping_count: currentVisit.pings.length,
+          });
+        }
+
+        // Step 2: Merge visits that are close together (gap < MERGE_GAP_MINUTES)
+        let currentMergedVisit: {
+          started_at: string;
+          ended_at: string;
+          ping_count: number;
+        } | null = null;
+
+        for (const visit of rawVisits) {
+          if (!currentMergedVisit) {
+            currentMergedVisit = { ...visit };
+          } else {
+            const gapMs = new Date(visit.started_at).getTime() 
+                        - new Date(currentMergedVisit.ended_at).getTime();
+            const gapMinutes = gapMs / (1000 * 60);
+
+            if (gapMinutes < MERGE_GAP_MINUTES) {
+              // Merge: extend the current visit
+              currentMergedVisit.ended_at = visit.ended_at;
+              currentMergedVisit.ping_count += visit.ping_count;
+            } else {
+              // Gap >= 30 min: save the previous and start a new one
+              blockVisits.push({
+                tractor_id: tractorId,
+                ...currentMergedVisit,
+              });
+              currentMergedVisit = { ...visit };
+            }
+          }
+        }
+
+        // Don't forget the last merged visit
+        if (currentMergedVisit) {
+          blockVisits.push({
+            tractor_id: tractorId,
+            ...currentMergedVisit,
           });
         }
       }
