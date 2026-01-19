@@ -1,4 +1,5 @@
-import { Leaf, Tractor, LogOut, Menu, Bell, BellPlus, AlertTriangle, Settings2 } from 'lucide-react';
+import { useState } from 'react';
+import { Leaf, Tractor, LogOut, Menu, Bell, BellPlus, AlertTriangle, Settings2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -10,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
+import { ImportGpsDataDialog } from '@/components/dialogs/ImportGpsDataDialog';
 import type { Alert, Block } from '@/types/farm';
 
 interface AppHeaderProps {
@@ -19,12 +21,15 @@ interface AppHeaderProps {
   onCreateBulkAlerts?: () => void;
   onManageAlerts?: () => void;
   onBlockClick?: (block: Block) => void;
+  onGpsImportSuccess?: () => void;
 }
 
-export function AppHeader({ triggeredAlerts, blocks, onToggleSidebar, onCreateBulkAlerts, onManageAlerts, onBlockClick }: AppHeaderProps) {
+export function AppHeader({ triggeredAlerts, blocks, onToggleSidebar, onCreateBulkAlerts, onManageAlerts, onBlockClick, onGpsImportSuccess }: AppHeaderProps) {
   const { user, signOut } = useAuth();
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   return (
+    <>
     <header className="h-16 border-b border-border bg-card/95 backdrop-blur-sm flex items-center justify-between px-4 shrink-0">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" className="md:hidden" onClick={onToggleSidebar}>
@@ -46,6 +51,16 @@ export function AppHeader({ triggeredAlerts, blocks, onToggleSidebar, onCreateBu
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Import GPS button */}
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={() => setImportDialogOpen(true)}
+          title="Importar datos GPS"
+        >
+          <Upload className="w-5 h-5" />
+        </Button>
+
         {/* Create bulk alerts button */}
         {onCreateBulkAlerts && (
           <Button 
@@ -144,5 +159,12 @@ export function AppHeader({ triggeredAlerts, blocks, onToggleSidebar, onCreateBu
         </DropdownMenu>
       </div>
     </header>
+
+    <ImportGpsDataDialog 
+      open={importDialogOpen} 
+      onOpenChange={setImportDialogOpen}
+      onSuccess={onGpsImportSuccess}
+    />
+    </>
   );
 }
