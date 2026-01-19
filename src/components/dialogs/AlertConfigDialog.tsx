@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bell, RefreshCw, BellDot, MapPin } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Bell, RefreshCw, BellDot, MapPin, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { Block } from '@/types/farm';
@@ -42,6 +43,7 @@ function AlertConfigContent({
   selectedBlockIds,
   handleToggleBlock,
   handleSelectAll,
+  handleToggleFarm,
   block,
   setIsMultiMode,
   isRecurring,
@@ -58,6 +60,7 @@ function AlertConfigContent({
   selectedBlockIds: Set<string>;
   handleToggleBlock: (id: string) => void;
   handleSelectAll: () => void;
+  handleToggleFarm: (farmBlocks: Block[]) => void;
   block: Block | null;
   setIsMultiMode: (value: boolean) => void;
   isRecurring: boolean;
@@ -69,6 +72,33 @@ function AlertConfigContent({
   handleCustomDaysBlur: () => void;
   selectedCount: number;
 }) {
+  const [expandedFarms, setExpandedFarms] = useState<Record<string, boolean>>({});
+
+  // Group blocks by farm
+  const groupedByFarm = useMemo(() => {
+    const groups: Record<string, Block[]> = {};
+    
+    blocks.forEach(b => {
+      const farmName = b.farm_name || 'Sin Fundo';
+      if (!groups[farmName]) groups[farmName] = [];
+      groups[farmName].push(b);
+    });
+    
+    // Sort farms alphabetically, then blocks by name within each farm
+    return Object.entries(groups)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([farmName, farmBlocks]) => ({
+        farmName,
+        blocks: farmBlocks.sort((a, b) => a.name.localeCompare(b.name))
+      }));
+  }, [blocks]);
+
+  const toggleFarm = (farmName: string) => {
+    setExpandedFarms(prev => ({
+      ...prev,
+      [farmName]: prev[farmName] === undefined ? false : !prev[farmName]
+    }));
+  };
   return (
     <div className="space-y-4">
       {/* Block selector (multi-mode or expandable) */}
@@ -89,30 +119,60 @@ function AlertConfigContent({
               {selectedBlockIds.size === blocks.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
             </Button>
           </div>
-          <ScrollArea className="h-40 rounded-md border p-2">
-            <div className="space-y-1">
-              {blocks.map((b) => (
-                <label
-                  key={b.id}
-                  className={cn(
-                    'flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors',
-                    selectedBlockIds.has(b.id) 
-                      ? 'bg-primary/10' 
-                      : 'hover:bg-muted'
-                  )}
-                >
-                  <Checkbox
-                    checked={selectedBlockIds.has(b.id)}
-                    onCheckedChange={() => handleToggleBlock(b.id)}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{b.name}</div>
-                    {b.farm_name && (
-                      <div className="text-xs text-muted-foreground truncate">{b.farm_name}</div>
-                    )}
-                  </div>
-                </label>
-              ))}
+          <ScrollArea className="h-48 rounded-md border">
+            <div className="p-2 space-y-1">
+              {groupedByFarm.map(({ farmName, blocks: farmBlocks }) => {
+                const isExpanded = expandedFarms[farmName] !== false; // default open
+                const allFarmSelected = farmBlocks.every(b => selectedBlockIds.has(b.id));
+                const someFarmSelected = farmBlocks.some(b => selectedBlockIds.has(b.id));
+                const selectedInFarm = farmBlocks.filter(b => selectedBlockIds.has(b.id)).length;
+
+                return (
+                  <Collapsible 
+                    key={farmName} 
+                    open={isExpanded}
+                    onOpenChange={() => toggleFarm(farmName)}
+                  >
+                    <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50">
+                      <Checkbox
+                        checked={allFarmSelected}
+                        className={someFarmSelected && !allFarmSelected ? 'opacity-50' : ''}
+                        onCheckedChange={() => handleToggleFarm(farmBlocks)}
+                      />
+                      <CollapsibleTrigger className="flex items-center gap-2 flex-1 min-w-0">
+                        {isExpanded ? (
+                          <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                        )}
+                        <span className="font-medium text-sm truncate">{farmName}</span>
+                        <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                          {selectedInFarm}/{farmBlocks.length}
+                        </span>
+                      </CollapsibleTrigger>
+                    </div>
+                    <CollapsibleContent className="pl-6">
+                      {farmBlocks.map((b) => (
+                        <label
+                          key={b.id}
+                          className={cn(
+                            'flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors',
+                            selectedBlockIds.has(b.id) 
+                              ? 'bg-primary/10' 
+                              : 'hover:bg-muted'
+                          )}
+                        >
+                          <Checkbox
+                            checked={selectedBlockIds.has(b.id)}
+                            onCheckedChange={() => handleToggleBlock(b.id)}
+                          />
+                          <span className="text-sm truncate">{b.name}</span>
+                        </label>
+                      ))}
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              })}
             </div>
           </ScrollArea>
         </div>
@@ -297,6 +357,20 @@ export function AlertConfigDialog({
     }
   };
 
+  const handleToggleFarm = (farmBlocks: Block[]) => {
+    setSelectedBlockIds(prev => {
+      const next = new Set(prev);
+      const allSelected = farmBlocks.every(b => prev.has(b.id));
+      
+      if (allSelected) {
+        farmBlocks.forEach(b => next.delete(b.id));
+      } else {
+        farmBlocks.forEach(b => next.add(b.id));
+      }
+      return next;
+    });
+  };
+
   const handleSave = () => {
     if (selectedBlockIds.size > 0) {
       onSave(Array.from(selectedBlockIds), ruleDays * 24, isRecurring);
@@ -313,6 +387,7 @@ export function AlertConfigDialog({
     selectedBlockIds,
     handleToggleBlock,
     handleSelectAll,
+    handleToggleFarm,
     block,
     setIsMultiMode,
     isRecurring,
