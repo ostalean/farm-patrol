@@ -403,19 +403,19 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
                     <div className="grid grid-cols-2 gap-2 items-center">
                       <label className="text-sm">Coordenadas (lat,lon):</label>
                       <Select 
-                        value={columnMapping.coordinates || ''} 
+                        value={columnMapping.coordinates || '__none__'} 
                         onValueChange={(v) => setColumnMapping(prev => ({ 
                           ...prev, 
-                          coordinates: v || null,
-                          latitude: v ? null : prev.latitude,
-                          longitude: v ? null : prev.longitude,
+                          coordinates: v === '__none__' ? null : v,
+                          latitude: v !== '__none__' ? null : prev.latitude,
+                          longitude: v !== '__none__' ? null : prev.longitude,
                         }))}
                       >
                         <SelectTrigger className="h-9">
                           <SelectValue placeholder="O seleccionar separadas" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Usar lat/lon separadas</SelectItem>
+                          <SelectItem value="__none__">Usar lat/lon separadas</SelectItem>
                           {columns.map((col) => (
                             <SelectItem key={col} value={col}>{col}</SelectItem>
                           ))}
@@ -464,14 +464,14 @@ export function ImportGpsDataDialog({ open, onOpenChange, onSuccess }: ImportGps
                     <div className="grid grid-cols-2 gap-2 items-center">
                       <label className="text-sm">Velocidad (opcional):</label>
                       <Select 
-                        value={columnMapping.speed || ''} 
-                        onValueChange={(v) => setColumnMapping(prev => ({ ...prev, speed: v || null }))}
+                        value={columnMapping.speed || '__none__'} 
+                        onValueChange={(v) => setColumnMapping(prev => ({ ...prev, speed: v === '__none__' ? null : v }))}
                       >
                         <SelectTrigger className="h-9">
                           <SelectValue placeholder="Seleccionar columna" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Sin velocidad</SelectItem>
+                          <SelectItem value="__none__">Sin velocidad</SelectItem>
                           {columns.map((col) => (
                             <SelectItem key={col} value={col}>{col}</SelectItem>
                           ))}
