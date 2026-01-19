@@ -56,6 +56,10 @@ function getPolygonCoordinates(geojson: any): number[][] | null {
 // If a tractor leaves and re-enters within this time, it's considered the same visit
 const MERGE_GAP_MINUTES = 30;
 
+// Minimum requirements for a valid visit (to filter out transits)
+const MIN_PINGS_FOR_VALID_VISIT = 15;
+const MIN_DURATION_MINUTES = 3;
+
 serve(async (req) => {
   // Handle CORS
   if (req.method === "OPTIONS") {
@@ -242,6 +246,12 @@ serve(async (req) => {
         }
 
         // Step 2: Merge visits that are close together (gap < MERGE_GAP_MINUTES)
+        const mergedVisitsForTractor: Array<{
+          started_at: string;
+          ended_at: string;
+          ping_count: number;
+        }> = [];
+
         let currentMergedVisit: {
           started_at: string;
           ended_at: string;
@@ -262,10 +272,7 @@ serve(async (req) => {
               currentMergedVisit.ping_count += visit.ping_count;
             } else {
               // Gap >= 30 min: save the previous and start a new one
-              blockVisits.push({
-                tractor_id: tractorId,
-                ...currentMergedVisit,
-              });
+              mergedVisitsForTractor.push(currentMergedVisit);
               currentMergedVisit = { ...visit };
             }
           }
@@ -273,14 +280,36 @@ serve(async (req) => {
 
         // Don't forget the last merged visit
         if (currentMergedVisit) {
+          mergedVisitsForTractor.push(currentMergedVisit);
+        }
+
+        // Step 3: Filter out transit visits (not enough pings or duration)
+        for (const visit of mergedVisitsForTractor) {
+          // Check minimum pings
+          if (visit.ping_count < MIN_PINGS_FOR_VALID_VISIT) {
+            console.log(`Filtering visit: only ${visit.ping_count} pings (min: ${MIN_PINGS_FOR_VALID_VISIT})`);
+            continue;
+          }
+          
+          // Check minimum duration
+          const durationMs = new Date(visit.ended_at).getTime() 
+                           - new Date(visit.started_at).getTime();
+          const durationMinutes = durationMs / (1000 * 60);
+          
+          if (durationMinutes < MIN_DURATION_MINUTES) {
+            console.log(`Filtering visit: only ${durationMinutes.toFixed(1)} minutes (min: ${MIN_DURATION_MINUTES})`);
+            continue;
+          }
+          
+          // Valid visit - add it
           blockVisits.push({
             tractor_id: tractorId,
-            ...currentMergedVisit,
+            ...visit,
           });
         }
       }
 
-      console.log(`Block ${block.id}: Found ${blockVisits.length} visits`);
+      console.log(`Block ${block.id}: Found ${blockVisits.length} valid visits`);
 
       // Delete existing visits for this block (to avoid duplicates)
       const deleteQuery: any = { block_id: block.id };

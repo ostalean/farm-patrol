@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
-import { Search, AlertTriangle, Clock, CheckCircle, Filter, Bell } from 'lucide-react';
+import { Search, AlertTriangle, Clock, CheckCircle, Filter, Bell, ChevronDown, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import type { Block, BlockMetrics, Alert } from '@/types/farm';
 import { getBlockStatus, formatTimeSince, formatTimeSinceCompact, getAlertEffectiveStatus, type BlockStatus } from '@/types/farm';
@@ -28,6 +29,75 @@ function StatusIcon({ status, className }: { status: BlockStatus; className?: st
   }
 }
 
+function BlockItem({
+  block,
+  metrics,
+  hasTriggeredAlert,
+  isSelected,
+  onSelect,
+}: {
+  block: Block;
+  metrics: BlockMetrics | undefined;
+  hasTriggeredAlert: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const status = getBlockStatus(metrics);
+
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        'w-full text-left p-3 rounded-lg transition-all overflow-hidden',
+        'hover:bg-muted/80',
+        isSelected && 'bg-primary/10 border border-primary/30',
+        !isSelected && 'border border-transparent'
+      )}
+    >
+      {/* CSS Grid: icon | text (flexible) | time (fixed) */}
+      <div className="grid grid-cols-[1rem_minmax(0,1fr)_3.5rem] items-center gap-2 w-full">
+        {/* Col 1: Status icon */}
+        <StatusIcon status={status} />
+        
+        {/* Col 2: Name + crop (flexible, truncates) */}
+        <div className="min-w-0 overflow-hidden">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-medium truncate">{block.name}</span>
+            {hasTriggeredAlert && (
+              <Bell className="w-3 h-3 text-destructive animate-pulse shrink-0" />
+            )}
+          </div>
+          {block.crop && (
+            <p className="text-sm text-muted-foreground truncate">
+              {block.crop}
+            </p>
+          )}
+        </div>
+        
+        {/* Col 3: Time column (fixed width, always visible) */}
+        <div 
+          className="text-right justify-self-end"
+          title={formatTimeSince(metrics?.last_seen_at ?? null)}
+        >
+          <div className={cn(
+            'text-sm font-medium',
+            status === 'healthy' && 'text-success',
+            status === 'warning' && 'text-warning',
+            status === 'critical' && 'text-destructive'
+          )}>
+            {formatTimeSinceCompact(metrics?.last_seen_at ?? null)}
+          </div>
+          {metrics && (
+            <div className="text-xs text-muted-foreground whitespace-nowrap">
+              {metrics.passes_24h} hoy
+            </div>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export function BlockList({
   blocks,
   blockMetrics,
@@ -39,6 +109,7 @@ export function BlockList({
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'time'>('time');
   const [filterAlerts, setFilterAlerts] = useState(false);
+  const [expandedFarms, setExpandedFarms] = useState<Record<string, boolean>>({});
 
   const alertsByBlock = useMemo(() => {
     const map: Record<string, Alert[]> = {};
@@ -88,11 +159,32 @@ export function BlockList({
     return filtered;
   }, [blocks, blockMetrics, search, sortBy, filterAlerts, alertsByBlock]);
 
+  // Group blocks by farm
+  const groupedByFarm = useMemo(() => {
+    const groups: Record<string, Block[]> = {};
+    
+    sortedBlocks.forEach(block => {
+      const farmName = block.farm_name || 'Sin Fundo';
+      if (!groups[farmName]) groups[farmName] = [];
+      groups[farmName].push(block);
+    });
+    
+    // Sort farms alphabetically
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [sortedBlocks]);
+
   // Calculate effective triggered alerts based on metrics
   const triggeredAlerts = alerts.filter((alert) => {
     const metrics = blockMetrics[alert.block_id];
     return getAlertEffectiveStatus(alert, metrics?.last_seen_at ?? null) === 'triggered';
   });
+
+  const toggleFarm = (farmName: string) => {
+    setExpandedFarms(prev => ({
+      ...prev,
+      [farmName]: prev[farmName] === undefined ? false : !prev[farmName]
+    }));
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -151,68 +243,65 @@ export function BlockList({
         </div>
       </div>
 
-      {/* Block list */}
+      {/* Block list grouped by farm */}
       <ScrollArea className="flex-1 overflow-x-hidden">
         <div className="p-2 space-y-1 overflow-x-hidden">
-          {sortedBlocks.map((block) => {
-            const metrics = blockMetrics[block.id];
-            const status = getBlockStatus(metrics);
-            const blockAlerts = alertsByBlock[block.id] || [];
-            const hasTriggeredAlert = blockAlerts.some((a) => 
-              getAlertEffectiveStatus(a, metrics?.last_seen_at ?? null) === 'triggered'
-            );
-            const isSelected = block.id === selectedBlockId;
+          {groupedByFarm.map(([farmName, farmBlocks]) => {
+            const isExpanded = expandedFarms[farmName] !== false; // default open
+            const farmTriggeredCount = farmBlocks.filter(block => {
+              const blockAlerts = alertsByBlock[block.id] || [];
+              const metrics = blockMetrics[block.id];
+              return blockAlerts.some(a =>
+                getAlertEffectiveStatus(a, metrics?.last_seen_at ?? null) === 'triggered'
+              );
+            }).length;
 
             return (
-              <button
-                key={block.id}
-                onClick={() => onBlockSelect(block)}
-                className={cn(
-                  'w-full text-left p-3 rounded-lg transition-all overflow-hidden',
-                  'hover:bg-muted/80',
-                  isSelected && 'bg-primary/10 border border-primary/30',
-                  !isSelected && 'border border-transparent'
-                )}
+              <Collapsible 
+                key={farmName} 
+                open={isExpanded}
+                onOpenChange={() => toggleFarm(farmName)}
               >
-                {/* CSS Grid: icon | text (flexible) | time (fixed) */}
-                <div className="grid grid-cols-[1rem_minmax(0,1fr)_3.5rem] items-center gap-2 w-full">
-                  {/* Col 1: Status icon */}
-                  <StatusIcon status={status} />
-                  
-                  {/* Col 2: Name + farm/crop (flexible, truncates) */}
-                  <div className="min-w-0 overflow-hidden">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="font-medium truncate">{block.name}</span>
-                      {hasTriggeredAlert && (
-                        <Bell className="w-3 h-3 text-destructive animate-pulse shrink-0" />
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {block.farm_name}{block.farm_name && block.crop && ' • '}{block.crop}
-                    </p>
-                  </div>
-                  
-                  {/* Col 3: Time column (fixed width, always visible) */}
-                  <div 
-                    className="text-right justify-self-end"
-                    title={formatTimeSince(metrics?.last_seen_at ?? null)}
-                  >
-                    <div className={cn(
-                      'text-sm font-medium',
-                      status === 'healthy' && 'text-success',
-                      status === 'warning' && 'text-warning',
-                      status === 'critical' && 'text-destructive'
-                    )}>
-                      {formatTimeSinceCompact(metrics?.last_seen_at ?? null)}
-                    </div>
-                    {metrics && (
-                      <div className="text-xs text-muted-foreground whitespace-nowrap">
-                        {metrics.passes_24h} hoy
-                      </div>
+                <CollapsibleTrigger className="w-full p-2 flex items-center gap-2 hover:bg-muted rounded-lg transition-colors">
+                  {isExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  )}
+                  <span className="font-medium text-sm truncate">{farmName}</span>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {farmTriggeredCount > 0 && (
+                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                        {farmTriggeredCount}
+                      </Badge>
                     )}
+                    <Badge variant="secondary" className="text-xs">
+                      {farmBlocks.length}
+                    </Badge>
                   </div>
-                </div>
-              </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pl-2">
+                  {farmBlocks.map(block => {
+                    const metrics = blockMetrics[block.id];
+                    const blockAlerts = alertsByBlock[block.id] || [];
+                    const hasTriggeredAlert = blockAlerts.some((a) => 
+                      getAlertEffectiveStatus(a, metrics?.last_seen_at ?? null) === 'triggered'
+                    );
+                    const isSelected = block.id === selectedBlockId;
+
+                    return (
+                      <BlockItem
+                        key={block.id}
+                        block={block}
+                        metrics={metrics}
+                        hasTriggeredAlert={hasTriggeredAlert}
+                        isSelected={isSelected}
+                        onSelect={() => onBlockSelect(block)}
+                      />
+                    );
+                  })}
+                </CollapsibleContent>
+              </Collapsible>
             );
           })}
           
