@@ -1,4 +1,4 @@
-import { X, Clock, Calendar, Tractor, Bell, BellPlus, BellOff, CheckCircle, AlertTriangle, TrendingUp, Route, ChevronRight, Gauge, Target, MapPin, Download, FileText, FileSpreadsheet, Pencil, Trash2, MoreVertical } from 'lucide-react';
+import { X, Clock, Calendar, Tractor, Bell, BellPlus, BellOff, CheckCircle, AlertTriangle, TrendingUp, Route, ChevronRight, Gauge, Target, MapPin, Download, FileText, FileSpreadsheet, Pencil, Trash2, MoreVertical, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useBlockVisitStats, formatDuration } from '@/hooks/useBlockVisitStats';
 import { useReportExport } from '@/hooks/useReportExport';
+import { useProcessVisits } from '@/hooks/useProcessVisits';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import { BlockMiniMap } from './BlockMiniMap';
 import type { Feature, Polygon } from 'geojson';
@@ -234,6 +235,7 @@ export function BlockDetail({
   const tractorMap = new Map(tractors.map((t) => [t.id, t]));
   const visitStats = useBlockVisitStats(visits);
   const { exportToPDF, exportToCSV } = useReportExport();
+  const { processVisits, isProcessing } = useProcessVisits();
   
   // Calculate hours since last visit
   const hoursSinceLastVisit = metrics?.last_seen_at
@@ -267,6 +269,10 @@ export function BlockDetail({
       selectedVisit,
       coverageStats,
     });
+  };
+
+  const handleReprocessVisits = async () => {
+    await processVisits({ blockId: block.id });
   };
 
   // Group visits by date
@@ -306,6 +312,15 @@ export function BlockDetail({
                 <DropdownMenuItem onClick={handleExportCSV}>
                   <FileSpreadsheet className="w-4 h-4 mr-2" />
                   Exportar como CSV
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleReprocessVisits} disabled={isProcessing}>
+                  {isProcessing ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                  )}
+                  Reprocesar historial GPS
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onEditBlock}>
