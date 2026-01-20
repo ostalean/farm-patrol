@@ -13,6 +13,8 @@ import type { Feature, FeatureCollection, Polygon, LineString, Point } from 'geo
 import type { Block, BlockMetrics, Tractor, GpsPing, Alert } from '@/types/farm';
 import { getBlockStatus, getAlertEffectiveStatus } from '@/types/farm';
 import { DrawControl } from './DrawControl';
+import { GeocoderControl } from './GeocoderControl';
+import { FarmFilter } from './FarmFilter';
 import { AlertTriangle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -35,6 +37,12 @@ interface FarmMapProps {
   onClearPath?: () => void;
   missedAreas?: Feature<Polygon>[];
   alerts?: Alert[];
+  // Farm filter props
+  farms?: string[];
+  hiddenFarms?: Set<string>;
+  onFarmToggle?: (farmName: string) => void;
+  onSelectAllFarms?: () => void;
+  onDeselectAllFarms?: () => void;
 }
 
 function getBlockColor(status: ReturnType<typeof getBlockStatus>): string {
@@ -63,6 +71,11 @@ export function FarmMap({
   onClearPath,
   missedAreas,
   alerts = [],
+  farms = [],
+  hiddenFarms = new Set(),
+  onFarmToggle,
+  onSelectAllFarms,
+  onDeselectAllFarms,
 }: FarmMapProps) {
   const mapRef = useRef<MapRef>(null);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -75,6 +88,12 @@ export function FarmMap({
   // Check for token issues
   const tokenMissing = !MAPBOX_TOKEN || MAPBOX_TOKEN.trim() === '';
 
+  // Filter blocks by hidden farms
+  const visibleBlocks = useMemo(() => {
+    if (hiddenFarms.size === 0) return blocks;
+    return blocks.filter(block => !hiddenFarms.has(block.farm_name || 'Sin fundo'));
+  }, [blocks, hiddenFarms]);
+
   // Convert blocks to GeoJSON FeatureCollection for each status
   const { healthyBlocks, warningBlocks, criticalBlocks, selectedBlock } = useMemo(() => {
     const healthy: Feature<Polygon>[] = [];
@@ -82,7 +101,7 @@ export function FarmMap({
     const critical: Feature<Polygon>[] = [];
     let selected: Feature<Polygon> | null = null;
 
-    blocks.forEach((block) => {
+    visibleBlocks.forEach((block) => {
       const metrics = blockMetrics[block.id];
       const status = getBlockStatus(metrics ?? null);
       const feature: Feature<Polygon> = {
@@ -122,7 +141,7 @@ export function FarmMap({
         ? ({ type: 'FeatureCollection', features: [selected] } as FeatureCollection)
         : null,
     };
-  }, [blocks, blockMetrics, selectedBlockId]);
+  }, [visibleBlocks, blockMetrics, selectedBlockId]);
 
   // Create a feature collection for blocks with triggered alerts (for pulsing animation)
   const alertedBlocks = useMemo<FeatureCollection>(() => {
@@ -134,7 +153,7 @@ export function FarmMap({
       }
     });
 
-    const features: Feature<Polygon>[] = blocks
+    const features: Feature<Polygon>[] = visibleBlocks
       .filter((block) => alertedBlockIds.has(block.id))
       .map((block) => ({
         type: 'Feature',
@@ -144,7 +163,7 @@ export function FarmMap({
       }));
 
     return { type: 'FeatureCollection', features };
-  }, [blocks, blockMetrics, alerts]);
+  }, [visibleBlocks, blockMetrics, alerts]);
 
   // Convert visit path to GeoJSON LineString
   const pathData = useMemo(() => {
@@ -301,6 +320,8 @@ export function FarmMap({
         interactiveLayerIds={interactiveLayerIds}
       >
         <NavigationControl position="bottom-right" showCompass={false} />
+
+        <GeocoderControl position="top-right" />
 
         {enableDrawing && <DrawControl onBlockDrawn={onBlockDrawn} position="top-left" />}
 
@@ -533,6 +554,19 @@ export function FarmMap({
           </Popup>
         )}
       </Map>
+
+      {/* Farm filter overlay */}
+      {farms.length > 0 && onFarmToggle && onSelectAllFarms && onDeselectAllFarms && (
+        <div className="absolute top-4 left-14 z-10">
+          <FarmFilter
+            farms={farms}
+            hiddenFarms={hiddenFarms}
+            onFarmToggle={onFarmToggle}
+            onSelectAll={onSelectAllFarms}
+            onDeselectAll={onDeselectAllFarms}
+          />
+        </div>
+      )}
 
       {blocks.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
