@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { MapRef } from 'react-map-gl';
 import { FarmMap } from '@/components/map/FarmMap';
 import { BlockList } from '@/components/sidebar/BlockList';
@@ -67,6 +67,7 @@ export default function Dashboard() {
   const [tractors, setTractors] = useState<Tractor[]>([]);
   const [selectedVisit, setSelectedVisit] = useState<BlockVisit | null>(null);
   const [demoCoverageStats, setDemoCoverageStats] = useState<VisitCoverageStats | null>(null);
+  const [hiddenFarms, setHiddenFarms] = useState<Set<string>>(new Set());
 
   // Use database alerts
   const alerts = dbAlerts || [];
@@ -77,6 +78,26 @@ export default function Dashboard() {
   // Use database blocks and metrics
   const blocks = dbBlocks || [];
   const blockMetrics = dbMetrics || {};
+
+  // Extract unique farm names for filtering
+  const uniqueFarms = useMemo(() => {
+    const farms = new Set<string>();
+    blocks.forEach(b => farms.add(b.farm_name || 'Sin fundo'));
+    return Array.from(farms);
+  }, [blocks]);
+
+  // Farm filter handlers
+  const handleFarmToggle = useCallback((farmName: string) => {
+    setHiddenFarms(prev => {
+      const next = new Set(prev);
+      if (next.has(farmName)) next.delete(farmName);
+      else next.add(farmName);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAllFarms = useCallback(() => setHiddenFarms(new Set()), []);
+  const handleDeselectAllFarms = useCallback(() => setHiddenFarms(new Set(uniqueFarms)), [uniqueFarms]);
 
   // Fetch path for selected visit
   const { pings: visitPathPings } = useVisitPath(selectedVisit);
@@ -496,6 +517,11 @@ export default function Dashboard() {
             onClearPath={handleClearPath}
             missedAreas={showMissedAreas ? coverageStats?.missedAreas : undefined}
             alerts={alerts}
+            farms={uniqueFarms}
+            hiddenFarms={hiddenFarms}
+            onFarmToggle={handleFarmToggle}
+            onSelectAllFarms={handleSelectAllFarms}
+            onDeselectAllFarms={handleDeselectAllFarms}
           />
           
           <MapControls
