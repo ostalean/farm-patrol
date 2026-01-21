@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { point, lineString, pointToLineDistance } from "https://esm.sh/@turf/turf@7.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,6 +53,23 @@ function getPolygonCoordinates(geojson: any): number[][] | null {
   }
 }
 
+// Calculate distance from a point to the nearest edge of a polygon (in meters)
+function distanceToPolygonEdge(pointCoord: [number, number], polygon: number[][]): number {
+  const pt = point(pointCoord);
+  let minDistance = Infinity;
+  
+  // Iterate through each edge segment of the polygon
+  for (let i = 0; i < polygon.length - 1; i++) {
+    const edge = lineString([polygon[i], polygon[i + 1]]);
+    const distance = pointToLineDistance(pt, edge, { units: 'meters' });
+    if (distance < minDistance) {
+      minDistance = distance;
+    }
+  }
+  
+  return minDistance;
+}
+
 // Gap threshold for merging visits (in minutes)
 // If a tractor leaves and re-enters within this time, it's considered the same visit
 const MERGE_GAP_MINUTES = 30;
@@ -59,6 +77,11 @@ const MERGE_GAP_MINUTES = 30;
 // Minimum requirements for a valid visit (to filter out transits)
 const MIN_PINGS_FOR_VALID_VISIT = 15;
 const MIN_DURATION_MINUTES = 3;
+
+// Penetration depth filter: pings must be this far from the polygon edge
+// to distinguish real work from perimeter transit
+const MIN_PENETRATION_DEPTH_METERS = 15;
+const MIN_DEEP_PINGS = 5;
 
 serve(async (req) => {
   // Handle CORS
@@ -204,10 +227,11 @@ serve(async (req) => {
 
       for (const [tractorId, pings] of pingsByTractor) {
         // Step 1: Detect raw visits (each entry/exit creates one)
+        // Store full pings array to calculate penetration depth later
         const rawVisits: Array<{
           started_at: string;
           ended_at: string;
-          ping_count: number;
+          pings: GpsPing[];
         }> = [];
         
         let currentVisit: { started_at: string; pings: GpsPing[] } | null = null;
@@ -229,7 +253,7 @@ serve(async (req) => {
             rawVisits.push({
               started_at: currentVisit.started_at,
               ended_at: lastPing.ts,
-              ping_count: currentVisit.pings.length,
+              pings: [...currentVisit.pings],
             });
             currentVisit = null;
           }
@@ -241,7 +265,7 @@ serve(async (req) => {
           rawVisits.push({
             started_at: currentVisit.started_at,
             ended_at: lastPing.ts,
-            ping_count: currentVisit.pings.length,
+            pings: [...currentVisit.pings],
           });
         }
 
@@ -249,31 +273,39 @@ serve(async (req) => {
         const mergedVisitsForTractor: Array<{
           started_at: string;
           ended_at: string;
-          ping_count: number;
+          pings: GpsPing[];
         }> = [];
 
         let currentMergedVisit: {
           started_at: string;
           ended_at: string;
-          ping_count: number;
+          pings: GpsPing[];
         } | null = null;
 
         for (const visit of rawVisits) {
           if (!currentMergedVisit) {
-            currentMergedVisit = { ...visit };
+            currentMergedVisit = { 
+              started_at: visit.started_at, 
+              ended_at: visit.ended_at, 
+              pings: [...visit.pings] 
+            };
           } else {
             const gapMs = new Date(visit.started_at).getTime() 
                         - new Date(currentMergedVisit.ended_at).getTime();
             const gapMinutes = gapMs / (1000 * 60);
 
             if (gapMinutes < MERGE_GAP_MINUTES) {
-              // Merge: extend the current visit
+              // Merge: extend the current visit and accumulate pings
               currentMergedVisit.ended_at = visit.ended_at;
-              currentMergedVisit.ping_count += visit.ping_count;
+              currentMergedVisit.pings.push(...visit.pings);
             } else {
               // Gap >= 30 min: save the previous and start a new one
               mergedVisitsForTractor.push(currentMergedVisit);
-              currentMergedVisit = { ...visit };
+              currentMergedVisit = { 
+                started_at: visit.started_at, 
+                ended_at: visit.ended_at, 
+                pings: [...visit.pings] 
+              };
             }
           }
         }
@@ -283,11 +315,13 @@ serve(async (req) => {
           mergedVisitsForTractor.push(currentMergedVisit);
         }
 
-        // Step 3: Filter out transit visits (not enough pings or duration)
+        // Step 3: Filter out transit visits (not enough pings, duration, or penetration depth)
         for (const visit of mergedVisitsForTractor) {
+          const pingCount = visit.pings.length;
+          
           // Check minimum pings
-          if (visit.ping_count < MIN_PINGS_FOR_VALID_VISIT) {
-            console.log(`Filtering visit: only ${visit.ping_count} pings (min: ${MIN_PINGS_FOR_VALID_VISIT})`);
+          if (pingCount < MIN_PINGS_FOR_VALID_VISIT) {
+            console.log(`Filtering visit: only ${pingCount} pings (min: ${MIN_PINGS_FOR_VALID_VISIT})`);
             continue;
           }
           
@@ -301,10 +335,23 @@ serve(async (req) => {
             continue;
           }
           
+          // Check penetration depth - count pings that are far from the edge
+          const deepPings = visit.pings.filter(ping => {
+            const depth = distanceToPolygonEdge([ping.lon, ping.lat], polygon);
+            return depth >= MIN_PENETRATION_DEPTH_METERS;
+          }).length;
+          
+          if (deepPings < MIN_DEEP_PINGS) {
+            console.log(`Filtering visit: only ${deepPings} pings with depth >= ${MIN_PENETRATION_DEPTH_METERS}m (min: ${MIN_DEEP_PINGS})`);
+            continue;
+          }
+          
           // Valid visit - add it
           blockVisits.push({
             tractor_id: tractorId,
-            ...visit,
+            started_at: visit.started_at,
+            ended_at: visit.ended_at,
+            ping_count: pingCount,
           });
         }
       }
