@@ -22,8 +22,7 @@ export function GeocoderControl({ position = 'top-right' }: GeocoderControlProps
       marker: true,
       placeholder: 'Buscar lugar...',
       language: 'es',
-      countries: 'cl', // Limit to Chile - can be adjusted or removed
-      collapsed: true,
+      minLength: 2,
     });
 
     map.addControl(geocoder as any, position);
