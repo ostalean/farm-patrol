@@ -227,6 +227,46 @@
   background-size: 18px !important;
 }
 
+/* Mapbox Geocoder overrides */
+.mapboxgl-ctrl-geocoder {
+  z-index: 10 !important;
+  min-width: 280px !important;
+  @apply bg-card border border-border shadow-lg !important;
+  border-radius: 8px !important;
+}
+
+.mapboxgl-ctrl-geocoder--input {
+  @apply bg-transparent text-foreground !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+}
+
+.mapboxgl-ctrl-geocoder--input::placeholder {
+  @apply text-muted-foreground !important;
+}
+
+.mapboxgl-ctrl-geocoder--icon {
+  fill: hsl(var(--foreground)) !important;
+}
+
+.mapboxgl-ctrl-geocoder--icon-close {
+  margin-top: 3px;
+}
+
+.mapboxgl-ctrl-geocoder .suggestions {
+  @apply bg-card border border-border shadow-xl !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.mapboxgl-ctrl-geocoder .suggestions > li > a {
+  @apply bg-card text-foreground hover:bg-muted !important;
+  padding: 8px 12px !important;
+}
+
+.mapboxgl-ctrl-geocoder .suggestions > .active > a {
+  @apply bg-muted !important;
+}
+
 /* Map shell - contain Mapbox internal z-index layers */
 .map-shell {
   isolation: isolate;

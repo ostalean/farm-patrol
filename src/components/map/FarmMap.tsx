@@ -319,7 +319,7 @@ export function FarmMap({
         onMouseLeave={handleMouseLeave}
         interactiveLayerIds={interactiveLayerIds}
       >
-        <NavigationControl position="bottom-right" showCompass={false} />
+        <NavigationControl position="bottom-left" showCompass={false} />
 
         <GeocoderControl position="top-right" />
 
